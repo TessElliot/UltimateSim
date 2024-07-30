@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>City Boundary Game</title>
+
+    <!-- Include Turf.js for geographic calculations -->
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf"></script>
+
+    <!-- Include Phaser for game development -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.55.2/phaser.min.js"></script>
+
+    <!-- Include Leaflet CSS for map display -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <!-- Include Axios for HTTP requests -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <!-- Include Proj4js for coordinate transformation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.6/proj4.js"></script>
+
+    <!-- Include custom script as a module -->
+    <script type="module" src="./os.js"></script>
+</head>
+<body>
+    <input type="text" id="cityInput" placeholder="Enter your city">
+    <button onclick="fetchCityData()">Load City</button>
+    
+    <pre id="jsonDataViewer"></pre>
+    <div id="map" style="width: 600px; height: 400px;"></div>
+    <canvas id="myCanvas" width="800" height="600" style="display:none;"></canvas>
+</body>
+</html>
