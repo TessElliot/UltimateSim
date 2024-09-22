@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leaflet Bounding Box</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map { height: 600px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Initialize the map and set the view to the center of the bounding box
+        const map = L.map('map').setView([35.2096281, -97.4200828], 15); // Center on the bounding box
+
+        // Add tile layer to the map
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Define the bounding box coordinates
+        const bounds = [
+            [35.202945099999994, -97.4259516], // Southwest corner
+            [35.2061451,  -97.4227516]  // Northeast corner
+        ];
+      
+        // rectangle to the map to represent the bounding box
+        L.rectangle(bounds, {color: "#ff7800", weight: 1}).addTo(map);
+
+        // Fit the map view to the bounding box
+        map.fitBounds(bounds);
+    </script>
+</body>
+</html>
