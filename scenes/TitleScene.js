@@ -1,180 +1,160 @@
-﻿
+﻿import { setLocation } from "../location.js"; // Adjust path as necessary
 export class TitleScene extends Phaser.Scene {
+  constructor() {
+    super("bootGame");
+    this.minLat = null;
+    this.minLon = null;
+    this.city = ""; // Add city property
+    this.state = ""; // Add state property
+  }
 
-    constructor() {
-        super("bootGame");
-    }
+  getCity() {
+    return this.city;
+  }
 
-    init() {
-
-    }
-
+  getState() {
+    return this.state;
+  }
     preload() {
-        
 
+        this.load.image("background", "assets/background_title.png");
     }
 
     create() {
-        const text = this.add.text(500, 300, 'Utimate Sim Start');
 
-        text.setOrigin(0.5, 0.5);
-        text.setInteractive();
+      const bkgd = this.add.image(500, 300, "background");
+        bkgd.setScale(4);
 
-        text.on('pointerdown',() => {
-            text.setVisible(false);
-            this.showMenu();
-            });
-    }
+      const text = this.add.text(500, 270, "ULTIMATE SIM", {
+          fontFamily: 'Tahoma', // Sets the font family to Arial
+          fontSize: '48px',
+          color: '#a7e3ff'
+      }).setShadow(1, 1, '#000', 2, false, true);
 
+    text.setOrigin(0.5, 0.5);
+    text.setInteractive();
 
-    
-    
-    
-    showMenu(){
-       /* showMenu() displays menu with two options : 'start Game' Button and 'Resume Game' Button */
+    text.on("pointerdown", () => {
+      text.setVisible(false);
+      //this.showMenu();
+      this.showMenu();
+    });
+  }
 
-        // Defining two buttons
-        const startGameButton = this.add.text(500,250,'Start',{fill:'#0f0'});
-        const resumeGameButton =this.add.text(500,300,'Resume Game',{fill:'#0f0'});
+  showMenu() {
+      const startGameButton = this.add.text(500, 250, "Start", { fill: "#0f0" }).setShadow(1, 1, '#000000', 2, false, true);
+    const resumeGameButton = this.add.text(500, 300, "Resume Game", {
+      fill: "#0f0",
+    }).setShadow(1, 1, '#000000', 2, false, true);
 
-       //making the buttons interactive
-        startGameButton.setOrigin(0.5,0.5).setInteractive();
-        resumeGameButton.setOrigin(0.5,0.5).setInteractive();
-    
+    startGameButton.setOrigin(0.5, 0.5).setInteractive();
+    resumeGameButton.setOrigin(0.5, 0.5).setInteractive();
 
-        //locationOptions() is called upon choosing "Start Game" Button
-        startGameButton.on('pointerdown',() =>{
-            startGameButton.setVisible(false);
-            resumeGameButton.setVisible(false);
-            this.locationOptions();
-            
-        })
-    
-        //loadSavedGame() is called when ResumeGame is Clicked Upon
-        resumeGameButton.on('pointerdown',() =>{
-            startGameButton.setVisible(false);
-            resumeGameButton.setVisible(false);
-            this.loadSavedGame();
-        })
-    
-    }
+    startGameButton.on("pointerdown", () => {
+      startGameButton.setVisible(false);
+      resumeGameButton.setVisible(false);
+      this.locationOptions();
+    });
 
+    resumeGameButton.on("pointerdown", () => {
+      startGameButton.setVisible(false);
+      resumeGameButton.setVisible(false);
+      this.loadSavedGame();
+    });
+  }
 
-    locationOptions(){
+  locationOptions() {
+    const currentLocationButton = this.add.text(500, 250, "Current Location", {
+      fill: "#0f0",
+    }).setShadow(1, 1, '#000000', 2, false, true);
+    const manualLocationButton = this.add.text(500, 300, "Manual Location", {
+      fill: "#0f0",
+    }).setShadow(1, 1, '#000000', 2, false, true);
 
-        const currentLocationButton=this.add.text(500,250,'Current Location',{fill:'#0f0'});
-        const manualLocationButton= this.add.text(500,300,'Manual Location',{fill:"#0f0"});
+    currentLocationButton.setOrigin(0.5, 0.5).setInteractive();
+    manualLocationButton.setOrigin(0.5, 0.5).setInteractive();
 
+    currentLocationButton.on("pointerdown", async () => {
+      currentLocationButton.setVisible(false);
+      manualLocationButton.setVisible(false);
+      window.locationChoice = "current";
 
-        currentLocationButton.setOrigin(0.5,0.5).setInteractive();
-        manualLocationButton.setOrigin(0.5,0.5).setInteractive();
+      // Fetch current location asynchronously and start the game only after obtaining coordinates
+      // await this.fetchCurrentLocation();
+      this.scene.start("playingGame");
+    });
 
+    manualLocationButton.on("pointerdown", () => {
+      currentLocationButton.setVisible(false);
+      manualLocationButton.setVisible(false);
+      window.locationChoice = "manual";
 
-         currentLocationButton.on('pointerdown',()=>{
-            currentLocationButton.setVisible(false);
-            manualLocationButton.setVisible(false);
-            window.locationChoice='currentLocatoin';
-            // this.scence.start('UI');
-            this.scene.start('UI');
-            this.scene.start('playingGame');
+      // Pass a callback to start the game only after the form is submitted
+      this.manualLocationForm(() => {
+        console.log("Starting game with manually entered location.");
 
-        });
+        // Check if the city and state are correctly set before proceeding
+        console.log("City in callback:", this.city);
+        console.log("State in callback:", this.state);
 
+        // Start the game scene
+        this.scene.start("playingGame");
+      });
+    });
+  }
 
-        manualLocationButton.on('pointerdown', () => {
-            currentLocationButton.setVisible(false);
-            manualLocationButton.setVisible(false);
-            window.locationChoice = 'manual'; 
-            this.manualLocationForm(() => {
-                // This callback will be triggered after the form submission is complete
-                this.scene.start('playingGame');
-            });
-        });
-    }
-
-
-
-
-
-
-    manualLocationForm(callback){
-        const formHTML = `
+  manualLocationForm(callback) {
+    const formHTML = `
         <form id="locationForm" style="background-color: white; padding: 10px;">
-            <label for="city">City:</label>
+            <label for="city">Latitude:</label>
             <input type="text" id="city" name="city"><br><br>
-            <label for="state">State:</label>
+            <label for="state">Longitude:</label>
             <input type="text" id="state" name="state"><br><br>
             <button type="button" id="submitButton">Submit</button>
         </form>
         `;
 
-
     const element = this.add.dom(500, 300).createFromHTML(formHTML);
     element.setOrigin(0.5, 0.5);
 
-    // Wait until the element is added to the DOM before setting up the form submission
-    this.setupFormSubmission(callback);
+    this.setupFormSubmission(element, callback);
+  }
+  setupFormSubmission(element, callback) {
+    const submitButton = element.getChildByID("submitButton");
 
-    console.log("Form added to scene and centered");
-    }
+    if (submitButton) {
+      submitButton.addEventListener("click", () => {
+        const city = element.getChildByID("city").value;
+        const state = element.getChildByID("state").value;
 
+        console.log(`Form submitted with city: ${city}, state: ${state}`); // Debug log
 
-    setupFormSubmission(callback) {
-        const submitButton = document.getElementById('submitButton');
-        
-        // Add event listener for form submission
-        submitButton.addEventListener('click', () => {
-            // Get values from the form
-            const city = document.getElementById('city').value;
-            const state = document.getElementById('state').value;
-    
-            if (city && state) {
-                // Call the function to fetch latitude and longitude
-                this.fetchLatLon(city, state, callback);
-                console.log("City received:", city, state);
-            } else {
-                console.log("Please enter both city and state.");
-            }
-        });
-    }
+        if (city && state) {
+          // Set location using the imported function
+          setLocation(city, state);
 
-    fetchLatLon(city, state, callback) {
-        const apiUrl = `https://nominatim.openstreetmap.org/search?city=${city}&state=${state}&format=json&limit=1`;
-    
-        fetch(apiUrl)
-            .then(response => response.json())
-            .then(data => {
-                if (data.length > 0) {
-                    const lat = data[0].lat;
-                    const lon = data[0].lon;
-                    console.log(`Latitude: ${lat}, Longitude: ${lon}`);
-    
-                    // Trigger the callback after fetching lat/lon
-                    if (callback) {
-                        callback();  // This will start the next scene
-                    }
-    
-                } else {
-                    console.log("Location not found.");
-                }
-            })
-            .catch(error => {
-                console.error("Error fetching latitude and longitude:", error);
-            });
-    }
-
-
-
-
-    loadSavedGame() {
-        const savedMapString = localStorage.getItem('savedMap');
-        if (savedMapString) {
-            // Start the playingGame scene with a flag to resume
-            this.scene.start('playingGame', { resume: true });
+          if (callback) {
+            callback(); // Call the callback after setting the values
+          }
         } else {
-            // No saved game found, inform the user
-            alert('No saved game found. Starting a new game.');
-            this.locationOptions();
+          console.log("Please enter both city and state.");
         }
+      });
+    } else {
+      console.error("Submit button not found.");
     }
+  }
+
+  loadSavedGame() {
+    const savedMapString = localStorage.getItem("savedMap");
+    if (savedMapString) {
+      this.scene.start("playingGame", { resume: true });
+    } else {
+      alert("No saved game found. Starting a new game.");
+      this.locationOptions();
+    }
+  }
 }
+
+// Create an instance and export it
+export const titleSceneInstance = new TitleScene();

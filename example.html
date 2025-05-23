@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bounding Boxes on Map</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <style>
+    #map {
+      height: 500px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Bounding Boxes Visualization</h1>
+  <div id="map"></div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  ></script>
+  <script>
+    // Initialize the map and set its view to a location
+    const map = L.map("map").setView([35.1926, -97.4436], 17);
+
+    // Add a tile layer to the map (OpenStreetMap in this case)
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    // Bounding Box 1
+    const bbox1 = [
+      [35.19246, -97.443726], // Bottom-left corner
+      [35.19274, -97.443726], // Top-left corner
+      [35.19274, -97.443446], // Top-right corner
+      [35.19246, -97.443446], // Bottom-right corner
+      [35.19246, -97.443726], // Close the rectangle
+    ];
+
+    // Bounding Box 2
+    const bbox2 = [
+      [35.19274, -97.443726], // Bottom-left corner
+      [35.19302, -97.443726], // Top-left corner
+      [35.19302, -97.443446], // Top-right corner
+      [35.19274, -97.443446], // Bottom-right corner
+      [35.19274, -97.443726], // Close the rectangle
+    ];
+
+    // Draw Bounding Box 1
+    L.polygon(bbox1, {
+      color: "blue",
+      fillOpacity: 0.4,
+    }).addTo(map).bindPopup("Bounding Box 1");
+
+    // Draw Bounding Box 2
+    L.polygon(bbox2, {
+      color: "red",
+      fillOpacity: 0.4,
+    }).addTo(map).bindPopup("Bounding Box 2");
+
+    // Fit map bounds to show both bounding boxes
+    const allBounds = bbox1.concat(bbox2);
+    map.fitBounds(allBounds);
+  </script>
+</body>
+</html>

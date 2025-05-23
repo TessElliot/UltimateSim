@@ -1,22 +1,45 @@
 ﻿import { processBoundingBoxes } from "../os.js";
-import { fetchLocation } from "../os.js";
-import { groupTiles } from "../os.js";
+import { fetchLocation, fetchLatLon } from "../os.js";
+import { landUseInfo } from "../os.js";
+import { fetchWeatherAlerts } from "../os.js";
+import { preloadAssets } from "../preloadAssets.js";
+import { createAnimations } from "../preloadAssets.js";
+import { updateAllRoadPatterns } from "../connector.js";
+import { findClimateNumber } from "../tileUtils.js";
+import { applyWaterOnDominantNoDataSide } from "../tileUtils.js";
+import { fixBeachTileFrames } from "../tileUtils.js";
 
 const spriteWidth = 32;
 const spriteHeight = spriteWidth / 2;
 
 var factor = 4;
 
-var boxSize = 0.0028;
+var boxSize = 0.0026;
 
 var tileWidth = spriteWidth / factor;
 var tileHeight = spriteHeight / factor;
 var setScale = 1 / factor;
 
-var smallTile;
-var mediumTile;
-var largeTile;
-var xLargeTile;
+var moveBool = false;
+var zoomBool = false;
+var rotateBool = false;
+var infoBool = false;
+var homeBool = false;
+
+var destroy = false;
+
+var smallTile = false;
+var mediumTile = false;
+var largeTile = false;
+var xLargeTile = false;
+
+var road = false;
+var bike = false;
+var trees = false;
+var wind = false;
+var solar = false;
+
+var placeTile = false;
 
 let tileArray = [];
 let mapTexArray = [];
@@ -26,196 +49,56 @@ let tileArrayRoad = [];
 
 let newTile;
 let n;
+const gridToTileKey = new Map();
 
-var destroy;
-var grow;
-var road;
-var bike;
-var wind;
-var water;
+const city = window.city;
+const state = window.state;
 
-const mapTilesWidth = 5;
-const mapTilesHeight = mapTilesWidth;
+let mapTilesWidth = 30;
+let mapTilesHeight = mapTilesWidth;
+
+const initialGridSize = mapTilesWidth;
+const expandedGridSize = 11;
 
 let isDraggingSprite = false;
+let zoomNow = false;
+let isLoading = true;
+
+var climateNum = 0;
+var climateNumArray = [];
 
 export class GameScene extends Phaser.Scene {
   constructor() {
     super("playingGame");
     this.getInfo = null;
+    this.tileChanges = []; // To store tile modifications
     this.startX = 0;
+    this.isFlooding = false;
     this.startY = 0;
     this.mapContainer = null;
+    this.tileData = [];
     this.mapTiles = [];
     this.mapTilesPos = [];
     this.mapTilesType = [];
+    this.climateText = "";
     this.mapArray = [];
     this.results = [];
+    this.spiralState = 0;
+    this.mainArray = [];
+    this.changeHistory = [];
+    this.secondArray = [];
+    this.clusters = [];
+    this.secondLoad = false;
+    this.isaReverting = false;
+    // this.applyPatternAction = this.applyPatternAction.bind(this);
   }
 
   preload() {
-    this.load.image("button", "assets/button.png");
-    this.load.image("button_clicked", "assets/button_clicked.png");
-    this.load.image("UI_bkgd", "assets/UI_bkgd.png");
-
-    this.load.image("industrial", "assets/all/warehouse.png");
-    this.load.image("wood", "assets/all/forest.png");
-    this.load.image("power:plant", "assets/all/power_solar.png");
-    this.load.image("empty", "assets/all/empty.png");
-    this.load.image("church", "assets/all/church.png");
-    this.load.image("university", "assets/all/university.png");
-    this.load.image("school", "assets/all/school.png");
-    this.load.image("grass", "assets/all/grass.png");
-    this.load.image("grassland", "assets/all/grass.png");
-    this.load.image("swimming_pool", "assets/all/swimming_pool.png");
-    this.load.image("no data", "assets/all/no_data.png");
-    this.load.image("commercial", "assets/all/commercial.png");
-    this.load.image("playground", "assets/all/playground.png");
-    this.load.image("golf_course", "assets/all/golf_course.png");
-    this.load.image("public", "assets/all/grass.png");
-    this.load.image("hospital", "assets/all/hospital.png");
-    this.load.image("apartments", "assets/all/apartments_medium.png");
-    this.load.image("religious", "assets/all/church.png");
-    this.load.image("social_facility", "assets/all/social_facility.png");
-    this.load.image("playground", "assets/all/playground.png");
-    this.load.image("office", "assets/all/office_medium.png");
-    this.load.image("nature_reserve", "assets/all/nature_reserve.png");
-    this.load.image("substation", "assets/all/substation.png");
-    this.load.image("military", "assets/all/military.png");
-    this.load.image("shed", "assets/all/shed.png");
-    this.load.image("sports_centre", "assets/all/sports_centre.png");
-    this.load.image("meadow", "assets/all/meadow.png");
-    this.load.image("cemetery", "assets/all/cemetery.png");
-    this.load.image("quarry", "assets/all/quarry.png");
-    this.load.image("plant_nursery", "assets/all/plant_nursery.png");
-    this.load.image("hotel", "assets/all/hotel.png");
-    this.load.image("parking", "assets/all/parking.png");
-    this.load.image("garages", "assets/all/parking.png");
-    this.load.image("brownfield", "assets/all/brownfield.png");
-
-    this.load.spritesheet("farmland", "assets/all/farm.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("farmyard", "assets/all/farm.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("reservoir", "assets/all/water_anim.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("construction", "assets/all/construction_anim.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("wetland", "assets/all/wetland_anim.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("dump_station", "assets/all/dump_station_anim.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("landfill", "assets/all/landfill.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("park", "assets/all/park.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("pitch", "assets/all/pitch.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("recreation_ground", "assets/all/pitch.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("house", "assets/all/detached.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("detached", "assets/all/detached.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("neighbourhood", "assets/all/neighbourhood.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("residential", "assets/all/residential.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("scrub", "assets/all/scrub.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("retail", "assets/all/retail.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("water", "assets/all/pond.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-
-    this.load.spritesheet("tiles", "assets/test_spritesheet.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("tiles_med", "assets/test_med_spritesheet.png", {
-      frameWidth: 64,
-      frameHeight: 64,
-    });
-    this.load.spritesheet("destroy", "assets/ground_anim.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("grow", "assets/grow_anim.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("brian", "assets/brian_spritesheet.png", {
-      frameWidth: 32,
-      frameHeight: 64,
-    });
-    this.load.spritesheet("farm", "assets/farm.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-
-    this.load.spritesheet("pond_b", "assets/pond_anim.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("tree_b", "assets/tree_anim.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("road", "assets/road.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("bike", "assets/road_with_bike.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet("wind", "assets/wind_power_anim.png", {
-      frameWidth: 32,
-      frameHeight: 64,
-    });
-
-    this.load.image("green_building", "assets/forest_building.png");
-    this.load.image("skyscraper", "assets/building.png");
-    this.load.image("forest", "assets/brian_forest.png");
-    this.load.image("solar", "assets/solar.png");
-    this.load.image("hydrogen", "assets/hydrogen.png");
+    preloadAssets(this);
   }
 
   async create(data) {
+    // console.log(this);
     this.emitter = EventDispatcher.getInstance();
 
     this.mapTiles = [];
@@ -233,43 +116,93 @@ export class GameScene extends Phaser.Scene {
     var gWidth = this.sys.game.canvas.width;
     var gHeight = this.sys.game.canvas.height;
 
-    //CAMERAS:
+    //MAIN CAMERA:
+
     const camGame = this.cameras.main;
+    camGame.setZoom(4);
     camGame.setBounds(0, 0, gWidth, gHeight);
-    camGame.setZoom(1);
-    camGame.centerOn = (0, 0);
 
-    const camInfo = this.cameras.add(30, 550, 130, 555);
-    camInfo.setOrigin(0, 0);
-    camInfo.setZoom(1);
-    camInfo.setBackgroundColor(0x00000);
+    //BACKGROUND:
 
-    // BACKGROUND:
-    const Background_color = this.add.graphics({
-      fillStyle: { color: 0xa7e3ff },
+    const BackgroundColor = this.add.graphics({
+      //fillStyle: { color: 0xa7e3ff },
+      fillStyle: { color: 0x4e2e22 },
     });
-    const Background = new Phaser.Geom.Rectangle(0, 0, 1000, 600);
-    Background_color.fillRectShape(Background);
-    camInfo.ignore(Background);
 
-    // Now declared in Constructor const getInfo = this.add.text(0, 0, 'info');
-    this.getInfo = this.add.text(0, 0, "info");
-    camGame.ignore(this.getInfo);
-    console.log("calledanimatoins");
+    const Background = new Phaser.Geom.Rectangle(0, 0, 1000, 550);
+
+    const bkgd = this.add.image(500, 300, "background_image");
+    bkgd.setScale(1);
+    bkgd.setTint(0x4e2e22);
+
+    const bkgdProcessing = this.add.image(500, 300, "background_image");
+    bkgdProcessing.setScale(4);
+    bkgdProcessing.setTint(0x4e2e22);
+
+    BackgroundColor.fillRectShape(Background);
+
+    const GameBarColor = this.add.graphics().fillStyle(0x000000, 0.25);
+
+    const GameBar = new Phaser.Geom.Rectangle(0, 550, gWidth, gHeight);
+    GameBarColor.fillRectShape(GameBar);
+
+    //LOADING:
+
+    const textLoad = this.add.text(30, 30, "", {
+      color: "#ff6633",
+    });
+    textLoad.setOrigin(0, 0);
+
+    camGame.ignore(textLoad);
+    const camProcessing = this.cameras.add(0, 0, 300, 100);
+    camProcessing.setZoom(1);
+    camProcessing.ignore(bkgd);
+
+    camGame.ignore(bkgdProcessing);
+
+    //const textIterations = [
+    //    "awaiting OpenStreetMap",
+    //    "awaiting OpenStreetMap.",
+    //    "awaiting OpenStreetMap..",
+    //    "awaiting OpenStreetMap...",
+    //];
+    const textIterations = [
+      "processing map",
+      "processing map.",
+      "processing map..",
+      "processing map...",
+    ];
+    let index = 0;
+
+    //set and clear loading text
+    let intervalId = setInterval(() => {
+      if (isLoading == false) {
+        clearInterval(intervalId);
+        console.log("Interval cleared!");
+      } else {
+        textLoad.text = textIterations[index];
+        index = (index + 1) % textIterations.length; // Reset index to 0 when it reaches the end
+      }
+    }, 1000);
+
+    GameBarColor.fillRectShape(GameBar);
+
     //animations
-    this.createAnimations();
+    createAnimations(this);
+
+    this.getInfo = this.add
+      .text(30, 568, "", {
+        color: "#ff6633",
+      })
+      .setShadow(1, 1, "#ff9933", 3, false, true);
 
     // CREATE MAP:
-    /*TileWidthHalf is out of use , (they were used only 2 times,
-         replaced that with,"tileWidth/2" instead of "tileWidth"),,same for tileHweightHalf
-         can be used again , if needed*/
-    const tileWidthHalf = tileWidth / 2;
-    const tileHeightHalf = tileHeight / 2;
 
     this.mapContainer = this.add.container(0, 0);
+    this.mapContainer.sort("y");
 
-    this.startX = gWidth / 2 - ((spriteWidth * mapTilesWidth) / 2) * setScale;
-    this.startY = gHeight / 2;
+    this.startX = gWidth / 2 - mapTilesWidth / 2;
+    this.startY = gHeight / 2 - mapTilesHeight / 2;
 
     try {
       if (data && data.resume) {
@@ -277,60 +210,1079 @@ export class GameScene extends Phaser.Scene {
       } else {
         await this.startNewGame(boxSize, mapTilesWidth, mapTilesHeight);
       }
-
-      //   let results=await this.fetchLocationAndBoundingBoxes(boxSize,mapTilesWidth,mapTilesHeight);
-      //   results= await this.countArtificialTiles(results);
-      //   this.layTilesOnPlayboard(results,mapTilesHeight,mapTilesWidth);
-      this.getInfo.text = "";
-
-      const clusters = groupTiles(mapTilesHeight, mapTilesWidth, this.results);
-
-      // Function to print all elements of the clusters
-      function printClusters(clusters) {
-        clusters.forEach((cluster, clusterIndex) => {
-          console.log(`Cluster ${clusterIndex + 1}:`);
-          console.log(`  Type: ${cluster.type}`);
-          console.log("  Tiles:");
-          cluster.tiles.forEach((tile, tileIndex) => {
-            console.log(`    ${tileIndex + 1}. (${tile.x}, ${tile.y})`);
-          });
-        });
-      }
-
-      // Call the function to print clusters
-      printClusters(clusters);
     } catch (error) {
       console.error("Error fetching land use data:", error);
     }
+    //// line for proper tile placement
+    this.mapContainer.sort("y");
 
-    this.cameras.main.scrollX = -this.startX;
-    this.cameras.main.scrollY = -this.startY;
+    let mapX = gWidth / 2 + mapTilesWidth * factor;
+    let mapY = gHeight / 2;
+
+    textLoad.destroy();
+    isLoading = false;
+
+    //change starting camera zoom
+    if (mapTilesWidth <= 20) {
+      camGame.setZoom(4);
+      bkgd.setScale(1);
+    } else if (mapTilesWidth <= 50) {
+      camGame.setZoom(2);
+      bkgd.setScale(2);
+    } else if (mapTilesWidth >= 100) {
+      camGame.setZoom(1);
+      bkgd.setScale(4);
+    }
+    let startZoom = camGame.zoom;
+
+    //CLIMATE NUMBER CALC:
+    for (i = 0; i < this.mapTiles.length; i++) {
+      let num;
+
+      let key = this.mapTiles[i].texture.key;
+      //console.log(key);
+
+      let newNum = findClimateNumber(key);
+      //console.log(newNum);
+      num = newNum;
+
+      climateNumArray.push(num);
+
+      var newClimateNum = climateNum + num;
+      climateNum = newClimateNum;
+    }
+
+    this.climateText = this.add
+      .text(640, 568, "Total Regional Climate Impact: " + climateNum, {
+        //color: '#00ff00'
+        color: "#ff6633",
+      })
+      .setShadow(1, 1, "#ff9933", 3, false, true);
+    camGame.ignore(this.climateText);
 
     // MAP INTERACTIVITIY:
     // (see TileArrayTempate.png for tile numbers)
-    var placeTile = false;
+    this.addTileListeners();
 
-    for (i = 0; i < this.mapTiles.length; i++) {
-      const scene = this;
+    ///UISCENE
 
-      //for pointerover
-      this.mapTiles[i].on("pointerover", function (pointer) {
-        //console.log(mapTiles.indexOf(this));
+    this.UIScene = new UIScene({ scene: this });
 
-        pX = this.x;
-        pY = this.y;
+    this.setListeners();
+    this.input.keyboard.on("keydown-T", () => {
+      this.startRandomTornado(30, 150);
+    });
+
+    const camInfo = this.cameras.add(0, 550, gWidth, gHeight);
+    camInfo.setOrigin(0, 550);
+    camInfo.scrollY = 550;
+    camInfo.setZoom(1);
+    camInfo.setBackgroundColor(0x00000);
+
+    camGame.ignore(this.UIScene.buttons);
+
+    camInfo.ignore(this.UIScene.buttons);
+    camInfo.ignore(this.mapContainer);
+    camInfo.ignore(Background);
+
+    camProcessing.ignore(this.UIScene.buttons);
+    camProcessing.ignore(this.mapContainer);
+    camProcessing.ignore(Background);
+
+    this.cameras.remove(camProcessing);
+
+    this.input.on(
+      "pointerdown",
+      function (pointer) {
+        if (!isDraggingSprite && moveBool) {
+          // Only allow map dragging if no sprite is being dragged
+          this.dragStartX = pointer.x - this.mapContainer.x;
+          this.dragStartY = pointer.y - this.mapContainer.y;
+          this.isDragging = true;
+        } else {
+        }
+
+        if (moveBool) {
+          this.getInfo.text = "Move Map (SHIFT)";
+        } else if (rotateBool) {
+          this.getInfo.text = " Rotate Map (R)";
+        } else if (homeBool) {
+          this.getInfo.text = " Center Map (F)";
+          s.mapContainer.x = 0;
+          s.mapContainer.y = 0;
+        } else if (zoomBool) {
+          this.getInfo.text = " Zoom Map (SPACE)";
+        } else if (infoBool) {
+          this.getInfo.text = " Get Map Info";
+        } else if (wind) {
+          this.getInfo.text = " Build Wind Power +8";
+        } else if (solar) {
+          this.getInfo.text = " Build Solar Power +6";
+        } else if (trees) {
+          this.getInfo.text = "Plant Trees +5";
+        } else if (destroy) {
+          this.getInfo.text = "Bulldoze -1";
+        } else if (mediumTile && !largeTile) {
+          this.getInfo.text = "Build Green Apartments +3";
+        } else if (largeTile) {
+          this.getInfo.text = "Build Hydrogen Power +10";
+        }
+      },
+      this
+    );
+
+    this.input.on(
+      "pointermove",
+      function (pointer) {
+        if (this.isDragging && !isDraggingSprite) {
+          this.mapContainer.x = pointer.x - this.dragStartX;
+          this.mapContainer.y = pointer.y - this.dragStartY;
+        }
+      },
+      this
+    );
+
+    this.input.on(
+      "pointerup",
+      function () {
+        this.isDragging = false;
+
+        if (this.tempSprite) {
+          // Ensure to stop dragging the sprite as well
+          isDraggingSprite = false;
+        }
+      },
+      this
+    );
+
+    // KEYBOARD INPUTS:
+    //Space to Zoom,
+    var spaceBar = this.input.keyboard.addKey("SPACE");
+    var leftArrow = this.input.keyboard.addKey("LEFT");
+    var rightArrow = this.input.keyboard.addKey("RIGHT");
+    var upArrow = this.input.keyboard.addKey("UP");
+    var downArrow = this.input.keyboard.addKey("DOWN");
+    var f = this.input.keyboard.addKey("F");
+    var r = this.input.keyboard.addKey("R");
+    var shift = this.input.keyboard.addKey("SHIFT");
+
+    spaceBar.on("down", function () {
+      // if (camGame.zoom == startZoom) {
+      //   camGame.setZoom(startZoom + 2);
+      // } else
+      if (camGame.zoom == 1) {
+        camGame.setZoom(2);
+        bkgd.setScale(2);
+      } else if (camGame.zoom == 2) {
+        camGame.setZoom(4);
+        bkgd.setScale(1);
+      } else if (camGame.zoom == 4) {
+        camGame.setZoom(8);
+        bkgd.setScale(0.5);
+      } else if (camGame.zoom == 6) {
+        camGame.setZoom(8);
+        bkgd.setScale(0.5);
+      } else if (camGame.zoom == 8) {
+        camGame.setZoom(1);
+        bkgd.setScale(4);
+      } else {
+      }
+    });
+
+    shift.on("down", function () {
+      moveBool = true;
+    });
+
+    shift.on("up", function () {
+      moveBool = false;
+    });
+
+    spaceBar.on("up", function () {});
+
+    let s = this;
+    let scene = this;
+
+    f.on("up", function () {
+      s.mapContainer.x = 0;
+      s.mapContainer.y = 0;
+    });
+
+    r.on("up", function () {
+      if (mapTilesWidth % 2 != 0) {
+        let mapWidth = mapTilesWidth; // Width of the grid
+
+        let newMapTiles = []; // Array to store the rotated textures
+        let mediumTileArray = []; // Array to handle medium tiles
+
+        // Calculate the rotated position for each tile
+        for (let i = 0; i < s.mapTiles.length; i++) {
+          let tile = s.mapTiles[i];
+          tile.anims.stop();
+
+          // Calculate the new position
+          let rotatedX = tile.gridY;
+          let rotatedY = mapWidth - tile.gridX - 1;
+
+          // Adjust for odd grids
+          if (mapWidth % 2 !== 0) {
+            rotatedX -= Math.floor(mapWidth / 2);
+            rotatedY -= Math.floor(mapWidth / 2);
+          }
+          rotatedX += Math.floor(mapWidth / 2);
+          rotatedY += Math.floor(mapWidth / 2);
+
+          // Find the tile that corresponds to the rotated position
+          let rotatedTile = s.mapTiles.find(
+            (t) => t.gridX === rotatedX && t.gridY === rotatedY
+          );
+
+          // Handle missing tiles gracefully
+          if (!rotatedTile) {
+            console.warn(
+              `No tile found at rotated position (gridX: ${rotatedX}, gridY: ${rotatedY}).`
+            );
+            newMapTiles.push(null); // Add a placeholder for missing tiles
+            continue;
+          }
+
+          newMapTiles.push(rotatedTile.texture.key);
+        }
+
+        // Update textures for all tiles
+        for (let i = 0; i < s.mapTiles.length; i++) {
+          let tile = s.mapTiles[i];
+
+          tile.anims.stop(); // Stop animations on the tile
+
+          let tex = newMapTiles[i];
+          if (!tex) {
+            console.warn(
+              `Skipping tile at index ${i} as no rotated texture was found.`
+            );
+            continue;
+          } else {
+          }
+          tile.setTexture(tex);
+
+          // Adjust origins based on tile width
+          if (tile.width === 32) {
+            tile.setOrigin(0.5, 0.5);
+          } else if (tile.width === 64) {
+            mediumTileArray.push(tile);
+          } else if (tile.width === 96) {
+            tile.setOrigin(0.5, 0.5);
+          }
+
+          if (s.anims.exists(tex)) {
+            tile.play({ key: tex, randomFrame: true });
+          } else {
+            tile.anims.stop();
+          }
+        }
+
+        // Handle medium tiles
+        if (mediumTileArray.length > 0) {
+          for (let i = 0; i < mediumTileArray.length; i++) {
+            let pX = mediumTileArray[i].x;
+            let pY = mediumTileArray[i].y;
+            let tex = mediumTileArray[i].texture.key;
+
+            mediumTileArray[i].setTexture("null");
+            mediumTileArray[i].setOrigin(0.5, 0.5);
+
+            let tilePosArray = [];
+
+            let x1 = pX - tileWidth / 2;
+            let y1 = pY - tileHeight / 2;
+
+            let x2 = pX + tileWidth / 2;
+            let y2 = pY - tileHeight / 2;
+
+            let x3 = pX;
+            let y3 = pY - tileHeight;
+
+            //console.log(x1, y1, x2, y2, x3, y3);
+
+            let tile1Pos = `${x1}, ${y1}`;
+            let tile2Pos = `${x2}, ${y2}`;
+            let tile3Pos = `${x3}, ${y3}`;
+
+            tilePosArray.push(tile1Pos, tile2Pos, tile3Pos);
+
+            for (let j = 0; j < tilePosArray.length; j++) {
+              let index = s.mapTilesPos.indexOf(tilePosArray[j]);
+              if (index !== -1) {
+                s.mapTiles[index].setTexture("null");
+                s.mapTiles[index].setOrigin(0.5, 0.5);
+              }
+            }
+
+            let changeSprite = s.mapTilesPos.indexOf(tilePosArray[0]);
+            if (changeSprite !== -1) {
+              s.mapTiles[changeSprite].setTexture(tex);
+              s.mapTiles[changeSprite].setOrigin(0.25, 0.47);
+            }
+          }
+        }
+
+        // Update grid positions after rotation
+        for (let i = 0; i < s.mapTiles.length; i++) {
+          let tile = s.mapTiles[i];
+          let newGridX = tile.gridY;
+          let newGridY = mapWidth - tile.gridX - 1;
+
+          tile.gridX = newGridX;
+          tile.gridY = newGridY;
+        }
+
+        // Update mapArray with new texture keys
+        s.mapArray = [];
+        for (let i = 0; i < s.mapTiles.length; i++) {
+          s.mapArray[i] = s.mapTiles[i].texture.key;
+        }
+        updateAllRoadPatterns(s);
+        fixBeachTileFrames(s);
+      } else {
+        s.mapTiles.forEach((tile) => {});
+
+        this.rotated = true;
+
+        let mapWidth = mapTilesWidth; // Width of the grid
+
+        let newMapTiles = []; // Array to store the rotated textures
+        let mediumTileArray = []; // Array to handle medium tiles
+
+        // Calculate the rotated position for each tile
+        for (let i = 0; i < s.mapTiles.length; i++) {
+          let tile = s.mapTiles[i];
+
+          // Calculate the new position using 1-based indexing for gridX and gridY
+
+          let rotatedX = tile.gridY; // Rotated X is based on Y
+          let rotatedY = mapWidth - tile.gridX + 1; // Rotated Y with 1-based indexing
+
+          // Find the tile that corresponds to the rotated position
+          let rotatedTile = s.mapTiles.find(
+            (t) => t.gridX === rotatedX && t.gridY === rotatedY
+          );
+
+          // Handle missing tiles gracefully
+          if (!rotatedTile) {
+            console.warn(
+              `No tile found at rotated position (gridX: ${rotatedX}, gridY: ${rotatedY}).`
+            );
+            newMapTiles.push(null); // Add a placeholder for missing tiles
+            continue;
+          }
+
+          // Add the texture key of the rotated tile to the newMapTiles array
+          newMapTiles.push(rotatedTile.texture.key);
+        }
+
+        // Update the textures of all tiles in the rotated grid
+        for (let i = 0; i < s.mapTiles.length; i++) {
+          let tile = s.mapTiles[i];
+
+          tile.anims.stop(); // Stop animations on the tile
+
+          // Set the new texture for the tile, skipping if the texture is null
+          let tex = newMapTiles[i];
+          if (!tex) {
+            console.warn(
+              `Skipping tile at index ${i} as no rotated texture was found.`
+            );
+            continue;
+          }
+
+          tile.setTexture(tex);
+
+          // Adjust origins based on tile width
+          if (tile.width === 32) {
+            tile.setOrigin(0.5, 0.5);
+          } else if (tile.width === 64) {
+            mediumTileArray.push(tile);
+          } else if (tile.width === 96) {
+            tile.setOrigin(0.5, 0.5);
+          }
+
+          // Restart animations if applicable
+          if (s.anims.exists(tex)) {
+            tile.play({ key: tex, randomFrame: true });
+          } else {
+            tile.anims.stop();
+          }
+        }
+        // Handle medium tiles
+
+        if (mediumTileArray.length > 0) {
+          for (let i = 0; i < mediumTileArray.length; i++) {
+            //let oldTile = mediumTileArray[i];
+            //let oldX = oldTile.x;
+            //let oldY = oldTile.y;
+            //let oldKey = oldTile.texture.key;
+
+            //// Stop old animation and temporarily null out the texture
+            //oldTile.anims.stop();
+            //oldTile.setTexture("null");
+            //oldTile.setOrigin(0.5, 1);
+
+            //let gridX = oldTile.gridX;
+            //let gridY = oldTile.gridY;
+            //let iso = someFunctionThatConvertsGridToIsometric(gridX, gridY);
+            //let newX = iso.x;
+            //let newY = iso.y;
+
+            //oldTile.x = newX;
+            //oldTile.y = newY;
+
+            //// Now give it the real texture again
+            //oldTile.setTexture(oldKey);
+
+            //// Finally, if we do have an anim for oldKey, restart it
+            //if (s.anims.exists(oldKey)) {
+            //    oldTile.play({ key: oldKey, randomFrame: true });
+            //}
+            let pX = mediumTileArray[i].x;
+            let pY = mediumTileArray[i].y;
+
+            let tex = mediumTileArray[i].texture.key;
+
+            mediumTileArray[i].setTexture("null");
+            mediumTileArray[i].setOrigin(0.5, 0.5);
+
+            let tilePosArray = [];
+
+            let x1 = pX - tileWidth / 2;
+            let y1 = pY + tileHeight / 2;
+
+            let x2 = pX + tileWidth / 2;
+            let y2 = pY + tileHeight / 2;
+
+            let x3 = pX;
+            let y3 = pY + tileHeight;
+
+            let tile1Pos = x1 + ", " + y1;
+            let tile2Pos = x2 + ", " + y2;
+            let tile3Pos = x3 + ", " + y3;
+
+            tilePosArray.push(tile1Pos, tile2Pos, tile3Pos);
+
+            for (let i = 0; i < tilePosArray.length; i++) {
+              let index = scene.mapTilesPos.indexOf(tilePosArray[i]);
+
+              scene.mapTiles[index].setTexture("null");
+              scene.mapTiles[index].setOrigin(0.5, 0.5);
+            }
+
+            let changeSprite = scene.mapTilesPos.indexOf(tilePosArray[0]);
+            scene.mapTiles[changeSprite].setTexture(tex);
+            scene.mapTiles[changeSprite].setOrigin(0.25, 0.47);
+          }
+        }
+
+        // Update the logical grid position (gridX, gridY) for all tiles
+        for (let i = 0; i < s.mapTiles.length; i++) {
+          let tile = s.mapTiles[i];
+
+          let newGridX = tile.gridY; // Rotated X becomes the new gridX
+          let newGridY = mapWidth - tile.gridX + 1; // Rotated Y becomes the new gridY
+
+          tile.gridX = newGridX;
+          tile.gridY = newGridY;
+        }
+
+        // Update mapArray with new texture keys
+        s.mapArray = [];
+        for (let i = 0; i < s.mapTiles.length; i++) {
+          s.mapArray[i] = s.mapTiles[i].texture.key;
+        }
+        updateAllRoadPatterns(s);
+        fixBeachTileFrames(s);
+      }
+    });
+  }
+
+  async startNewGame(boxSize, mapTilesWidth, mapTilesHeight) {
+    await this.fetchLocationAndBoundingBoxes(
+      boxSize,
+      mapTilesWidth,
+      mapTilesHeight
+    );
+  }
+
+  async checkLocationChoice() {
+    if (window.locationChoice === "current") {
+      console.log("User chose current location");
+      return "current";
+    } else if (window.locationChoice === "manual") {
+      console.log("User chose manual location");
+      return "manual";
+    } else {
+      console.log("No choice made");
+      return null;
+    }
+  }
+
+  layTilesOnPlayboard(tileType, x, y, box) {
+    const { id } = box; // Use box.id, x, y directly
+
+    // Check if this tile has a change recorded
+    const existingChange = this.tileChanges.find((tile) => tile.id === id);
+
+    // Use the new tileType if it exists in tileChanges, otherwise use the passed tileType
+    let finalTileType = existingChange ? existingChange.newTileType : tileType;
+    // if (finalTileType === "coastline") {
+    //   finalTileType = "road";
+    // } else if (finalTileType === "beach") {
+    //   finalTileType = "road";
+    // } else if (finalTileType === "road") {
+    //   finalTileType = "retail";
+    // }
+
+    this.tileData.push({ box, finalTileType });
+
+    const centerX = Math.floor(mapTilesWidth / 2);
+    const centerY = Math.floor(mapTilesHeight / 2);
+
+    //let isoX = this.startX + ((x - y) * tileWidth) / 2;
+    //let isoY = this.startY + ((x + y) * tileHeight) / 2;
+
+    let isoX = this.startX + (x - centerX + (y - centerY)) * (tileWidth / 2); // Reverse horizontal relationship
+    let isoY = this.startY + (x - centerX - (y - centerY)) * (tileHeight / 2); // Reverse vertical relationship
+
+    let tile = this.add.sprite(isoX, isoY, finalTileType); // Create sprite using tileType
+    let tilePosStr = isoX + ", " + isoY;
+    tile.setScale(setScale);
+    if (finalTileType === "green_apartments") {
+      tile.setOrigin(0.25, 0.47);
+    } else {
+      tile.setOrigin(0.5, 0.5);
+    }
+    tile.smoothed = false;
+    tile.play({ key: finalTileType, randomFrame: true });
+
+    tile.setInteractive({
+      pixelPerfect: true,
+      alphaTolerance: 1,
+    });
+
+    // Track tile index in mapArray
+    const tileIndex = y * mapTilesWidth + x;
+    // Store grid coordinates
+    tile.id = id;
+    tile.gridX = x;
+    tile.gridY = y;
+    const tileKey = `${box.minLat.toFixed(6)}_${box.minLon.toFixed(6)}`;
+    console.log(tileKey);
+    // tile.tileKey = tileKey; // Optional, still useful
+    gridToTileKey.set(`${x}_${y}`, tileKey); // ✅ map gridX_gridY to tileKey
+
+    console.log(`${x}_${y}`);
+    console.log(gridToTileKey);
+
+    this.mapContainer.add(tile);
+    this.mapTiles.push(tile);
+
+    this.mapTilesPos.push(tilePosStr);
+
+    this.mapTilesType.push(finalTileType);
+    updateAllRoadPatterns(this);
+  }
+
+  async fetchLocationAndBoundingBoxes(boxSize, mapTilesWidth, mapTilesHeight) {
+    const manual = await this.checkLocationChoice();
+    const locationData =
+      manual === "manual" ? await fetchLatLon() : await fetchLocation();
+    this.minLat = parseFloat(locationData.minLat);
+    this.minLon = parseFloat(locationData.minLon);
+    fetchWeatherAlerts(this.minLat, this.minLon);
+    const initialBox = {
+      minLat: this.minLat,
+      minLon: this.minLon,
+      maxLat: this.minLat + boxSize,
+      maxLon: this.minLon + boxSize,
+    };
+
+    this.mainArray = await this.renderGridInSpiral(
+      initialBox,
+      initialGridSize,
+      initialGridSize,
+      boxSize
+    );
+
+    //// line for proper tile placement
+    this.mapContainer.sort("y");
+    applyWaterOnDominantNoDataSide(this);
+
+    // Sort and transform the array to contain only tileType values
+  }
+
+  filterNonAdjacentBeaches() {
+    const beachLikeTypes = new Set(["beach", "coastline"]);
+    const waterTypes = new Set(["water", "reservoir"]);
+
+    for (let tile of this.mapTiles) {
+      if (beachLikeTypes.has(tile.texture.key)) {
+        let isAdjacentToWater = false;
+
+        const neighbors = this.getNeighborsForTile(tile, this);
+        for (const neighbor of neighbors) {
+          if (waterTypes.has(neighbor.texture.key)) {
+            isAdjacentToWater = true;
+            break;
+          }
+        }
+
+        if (!isAdjacentToWater) {
+          tile.setTexture("wood");
+          if (this.anims.exists("wood")) {
+            tile.play({ key: "wood", randomFrame: true });
+          }
+        }
+      }
+    }
+  }
+  startRandomTornado(steps = 20, delay = 200) {
+    const directions = [
+      { dx: 0, dy: -1 }, // up
+      { dx: 1, dy: 0 }, // right
+      { dx: 0, dy: 1 }, // down
+      { dx: -1, dy: 0 }, // left
+    ];
+
+    let x = Phaser.Math.Between(0, mapTilesWidth - 1);
+    let y = Phaser.Math.Between(0, mapTilesHeight - 1);
+
+    let stepCount = 0;
+
+    const tornadoStep = () => {
+      const tile = this.mapTiles.find((t) => t.gridX === x && t.gridY === y);
+      if (tile) {
+        tile.setTexture("destroy");
+        tile.play("bulldozing");
+        //destroy neighbor tiles
+        const neighbors = [
+          [x + 1, y],
+          [x - 1, y],
+          [x, y + 1],
+          [x, y - 1],
+        ];
+        for (let [nx, ny] of neighbors) {
+          const neighborTile = this.mapTiles.find(
+            (t) => t.gridX === nx && t.gridY === ny
+          );
+          if (neighborTile) {
+            neighborTile.setTexture("destroy");
+            neighborTile.play("bulldozing");
+          }
+        }
+      }
+
+      // Choose a random direction and move
+      const dir = Phaser.Math.RND.pick(directions);
+      x += dir.dx;
+      y += dir.dy;
+
+      // Clamp within bounds
+      x = Phaser.Math.Clamp(x, 0, mapTilesWidth - 1);
+      y = Phaser.Math.Clamp(y, 0, mapTilesHeight - 1);
+
+      stepCount++;
+      if (stepCount < steps) {
+        this.time.delayedCall(delay, tornadoStep);
+      }
+    };
+
+    tornadoStep();
+  }
+
+  async renderGridInSpiral(initialBox, gridWidth, gridHeight, boxSize) {
+    const gWidth = this.sys.game.canvas.width;
+    const gHeight = this.sys.game.canvas.height;
+
+    this.startX = gWidth / 2;
+    this.startY = gHeight / 2;
+
+    const tileData = [];
+    const pseudoTiles = [];
+    const tileTypesArray = [];
+    mapTilesWidth = gridWidth;
+    mapTilesHeight = gridHeight;
+
+    for await (const { tileType, box } of processBoundingBoxes(
+      initialBox,
+      gridWidth,
+      gridHeight
+    )) {
+      pseudoTiles.push({
+        gridX: box.x,
+        gridY: box.y,
+        texture: { key: tileType },
+        box: box,
+      });
+      tileData.push({ box, tileType });
+    }
+
+    applyWaterOnDominantNoDataSide(this, pseudoTiles);
+
+    let index = 0;
+    const renderNext = () => {
+      if (index >= pseudoTiles.length) {
+        this.addTileListeners();
+        updateAllRoadPatterns(this);
+        fixBeachTileFrames(this);
+        this.filterNonAdjacentBeaches();
+        this.updateClimateScore();
+        const simplifiedTileData = tileData.map(({ box, tileType }) => ({
+          x: box.x,
+          y: box.y,
+          id: box.id,
+          tileType: tileType,
+        }));
+
+        localStorage.setItem(
+          "savedMap",
+          JSON.stringify({
+            tiles: simplifiedTileData,
+            gridWidth: gridWidth,
+            gridHeight: gridHeight,
+            tileChanges: this.tileChanges,
+          })
+        );
+        return;
+      }
+
+      const tile = pseudoTiles[index];
+      this.layTilesOnPlayboard(
+        tile.texture.key,
+        tile.gridX,
+        tile.gridY,
+        tile.box
+      );
+      this.mapContainer.sort("y");
+
+      tileTypesArray.push({
+        x: tile.gridX,
+        y: tile.gridY,
+        type: tile.texture.key,
+      });
+      index++;
+
+      // Next tile after short delay
+      setTimeout(renderNext, 0);
+    };
+
+    renderNext();
+
+    return tileTypesArray;
+  }
+
+  // async renderGridInSpiral(initialBox, gridWidth, gridHeight, boxSize) {
+  //   // Initialize an array to store tile types and their positions
+
+  //   const gWidth = this.sys.game.canvas.width;
+  //   const gHeight = this.sys.game.canvas.height;
+
+  //   this.startX = gWidth / 2;
+  //   this.startY = gHeight / 2;
+
+  //   const tileTypesArray = [];
+  //   const tileData = [];
+  //   mapTilesWidth = gridWidth;
+  //   mapTilesHeight = gridHeight;
+  //   const pseudoTiles = [];
+  //   // Process each bounding box
+  //   for await (const { tileType, box } of processBoundingBoxes(
+  //     initialBox,
+  //     gridWidth,
+  //     gridHeight
+  //   )) {
+  //     const x = box.x;
+  //     const y = box.y;
+
+  //     //console.log(box.id);
+  //     tileData.push({ box, tileType });
+  //     // Render the tile on the playboard
+
+  //     this.layTilesOnPlayboard(tileType, x, y, box);
+
+  //     this.mapContainer.sort("y");
+
+  //     // Add the tile type and position to tileTypesArray
+  //     tileTypesArray.push({ x, y, type: tileType });
+  //   }
+  //   this.addTileListeners();
+
+  //   updateAllRoadPatterns(this);
+  //   const simplifiedTileData = tileData.map(({ box, tileType }) => ({
+  //     x: box.x,
+  //     y: box.y,
+  //     id: box.id,
+  //     tileType: tileType,
+  //   }));
+
+  //   // Ensure the data is valid before saving
+  //   if (!Array.isArray(simplifiedTileData) || simplifiedTileData.length === 0) {
+  //     console.error(
+  //       "Error: simplifiedTileData is empty or invalid!",
+  //       simplifiedTileData
+  //     );
+  //     return; // Prevent saving invalid data
+  //   }
+  //   // Save to localStorage
+  //   localStorage.setItem(
+  //     "savedMap",
+  //     JSON.stringify({
+  //       tiles: simplifiedTileData,
+  //       gridWidth: gridWidth,
+  //       gridHeight: gridHeight,
+  //       tileChanges: this.tileChanges,
+  //     })
+  //   );
+
+  //   const checkSavedData = localStorage.getItem("savedMap");
+
+  //   return tileTypesArray;
+  // }
+  startRandomTornado(steps = 20, delay = 200) {
+    const directions = [
+      { dx: 0, dy: -1 },
+      { dx: 1, dy: 0 },
+      { dx: 0, dy: 1 },
+      { dx: -1, dy: 0 },
+    ];
+
+    let x = Phaser.Math.Between(0, mapTilesWidth - 1);
+    let y = Phaser.Math.Between(0, mapTilesHeight - 1);
+
+    const tornadoSprite = this.add.sprite(0, 0, "tornado").play("tornado_spin");
+    tornadoSprite.setDepth(1000); // above all
+    tornadoSprite.setScale(setScale); // match other tiles
+    tornadoSprite.setOrigin(0.5, 0.5);
+
+    let step = 0;
+    const moveTornado = () => {
+      const tile = this.mapTiles.find((t) => t.gridX === x && t.gridY === y);
+      if (tile) {
+        tornadoSprite.x = tile.x;
+        tornadoSprite.y = tile.y;
+
+        // Destroy tile and neighbors
+        tile.setTexture("destroy");
+        tile.play("bulldozing");
+
+        for (let [nx, ny] of [
+          [x + 1, y],
+          [x - 1, y],
+          [x, y + 1],
+          [x, y - 1],
+        ]) {
+          const neighbor = this.mapTiles.find(
+            (t) => t.gridX === nx && t.gridY === ny
+          );
+          if (neighbor) {
+            neighbor.setTexture("destroy");
+            neighbor.play("bulldozing");
+          }
+        }
+      }
+
+      // Move randomly
+      const dir = Phaser.Math.RND.pick(directions);
+      x = Phaser.Math.Clamp(x + dir.dx, 0, mapTilesWidth - 1);
+      y = Phaser.Math.Clamp(y + dir.dy, 0, mapTilesHeight - 1);
+
+      step++;
+      if (step < steps) {
+        this.time.delayedCall(delay, moveTornado);
+      } else {
+        tornadoSprite.destroy(); // Remove sprite after animation
+      }
+    };
+
+    moveTornado();
+  }
+
+  clearPlayboard() {
+    this.mapContainer.removeAll(true); // Removes all child objects in the container
+    this.mapTiles = []; // Clear the mapTiles array
+    this.mapTilesPos = [];
+    this.mapTilesType = [];
+    this.tileData = [];
+  }
+
+  sortArrayLinearly(array) {
+    return [...array].sort((a, b) => {
+      if (a.y === b.y) {
+        return a.x - b.x; // Sort by x if y is the same
+      }
+      return a.y - b.y; // Otherwise, sort by y
+    });
+  }
+
+  async loadMap() {
+    console.log("Resuming saved game...");
+
+    const savedMapString = localStorage.getItem("savedMap");
+    console.log("Raw savedMapString from localStorage:", savedMapString);
+
+    if (!savedMapString) {
+      console.warn("No saved map found. Starting a new game.");
+      await this.startNewGame(
+        this.boxSize,
+        this.mapTilesWidth,
+        this.mapTilesHeight
+      );
+      return;
+    }
+
+    try {
+      const savedData = JSON.parse(savedMapString);
+      console.log(savedData);
+
+      if (!savedData || !savedData.tiles || !Array.isArray(savedData.tiles)) {
+        throw new Error("Loaded map data is invalid or empty.");
+      }
+
+      // Restore grid dimensions
+      mapTilesWidth = savedData.gridWidth;
+      mapTilesHeight = savedData.gridHeight;
+      console.log(
+        `Restored grid dimensions: Width=${mapTilesWidth}, Height=${mapTilesHeight}`
+      );
+
+      // Restore tileChanges for tracking changes made earlier
+      this.tileChanges = savedData.tileChanges || [];
+      console.log("Restored tileChanges:", this.tileChanges);
+
+      // Load tile data
+      const tileData = savedData.tiles;
+      console.log("Loaded tileData from localStorage:", tileData);
+
+      // Clear the playboard to prepare for reloading
+      this.clearPlayboard();
+
+      // Load tiles one by one
+      let index = 0;
+      const loadTile = () => {
+        if (index < tileData.length) {
+          const { x, y, tileType, id } = tileData[index];
+          console.log(`Laying tile ${index}: ${tileType} at (${x}, ${y})`);
+
+          // Construct a box object with the id
+          const box = { id, x, y };
+
+          this.layTilesOnPlayboard(tileType, x, y, box);
+          this.mapContainer.sort("y");
+          console.log(this.mapTiles);
+          console.log(this.mapArray);
+
+          index++;
+          setTimeout(loadTile, 0); // Load next tile after 100ms
+          this.addTileListeners();
+        } else {
+          // Ensure tiles are sorted correctly for rendering
+          this.mapContainer.sort("y");
+
+          console.log("Map successfully reloaded.");
+        }
+      };
+
+      loadTile();
+    } catch (e) {
+      console.error("Error loading map data:", e.message);
+      alert("Failed to load saved map. Starting a new game.");
+      await this.startNewGame(
+        this.boxSize,
+        this.mapTilesWidth,
+        this.mapTilesHeight
+      );
+    }
+  }
+
+  addTileListeners() {
+    for (let i = 0; i < this.mapTiles.length; i++) {
+      const scene = this; // Scene reference
+      const tile = this.mapTiles[i]; // Current tile reference
+
+      tile.removeAllListeners(); // Clear any previous listeners
+
+      // Pointerover listener
+      tile.on("pointerover", function (pointer) {
+        var hover = false;
+
+        const pX = this.x;
+        const pY = this.y;
+
+        if (moveBool || rotateBool || zoomBool || homeBool) {
+          hover = true;
+          console.log("hover over");
+        } else {
+          hover = false;
+        }
+
+        const tileKey = `${scene.gridX}_${scene.gridY}`; // Construct the key using gridX and gridY
+
+        // console.log(scene.tileData.box.id);
+
+        // const landUseData = landUseInfo.get(boxId);
+
+        // console.log(landUseInfo);
+        // console.log("this is amne");
+        // console.log(landUseData);
 
         let tile0 = scene.mapTiles.indexOf(this);
-        let mapTex0 = scene.mapTiles[tile0].texture.key;
 
-        let useType = scene.mapTilesType[tile0];
-        console.log(mapTex0);
+        let useType = scene.mapArray[tile0];
+        //console.log(mapTex0);
+
+        let displayClimateNum = findClimateNumber(this.texture.key);
+
+        const landUseTypes = landUseInfo[tile0];
+        if (infoBool) {
+          for (let i = 0; i < scene.mapTiles.length; i++) {
+            let mapTex = scene.mapTiles[i];
+            scene.getInfo.text =
+              `Land Use: '` +
+              useType +
+              `' with Climate Impact of: ` +
+              displayClimateNum;
+            mapTex.alpha = 0.3;
+          }
+          this.alpha = 1;
+          console.log("helow");
+          console.log(landUseInfo);
+          console.log(this.id);
+          const boxId = this.id;
+
+          // Assuming 'this' refers to the tile
+          const tileId = this.id;
+          console.log("Tile ID:", tileId);
+
+          // Find the tile's information in the map
+          const landUseData = landUseInfo.get(tileId);
+          console.log("Land Use Data:", landUseData);
+
+          if (landUseData) {
+            const maxAreaType = landUseData.maxAreaType || "unknown";
+            scene.getInfo.text =
+              `Land Use: '` +
+              useType +
+              `' with Climate Impact of: ` +
+              displayClimateNum; // Display the maxAreaType
+          } else {
+            //scene.getInfo.text = "No data found.";
+          }
+        } else {
+        }
 
         let tilePosArray = [];
+        mapTexArray = [];
+        tileArray = [];
 
         if (smallTile === true) {
           mapTexArray = [];
-          mapTexArray.push(mapTex0);
+          mapTexArray.push(scene.mapArray[tile0]);
           tileArray = [];
 
           let tile0Pos = pX + ", " + pY;
@@ -496,7 +1448,7 @@ export class GameScene extends Phaser.Scene {
           let tileCheck = scene.mapTilesPos.indexOf(tilePosArray[i]);
 
           if (tileCheck !== -1) {
-            mapTexArray.push(scene.mapTiles[tileCheck].texture.key);
+            // mapTexArray.push(scene.mapTiles[tileCheck].texture.key);
             tileArray.push(scene.mapTiles[tileCheck]);
           } else {
           }
@@ -504,7 +1456,6 @@ export class GameScene extends Phaser.Scene {
 
         function allAreEqual(array) {
           let areEqual = true;
-
           for (const element of array) {
             if (element !== array[0]) {
               areEqual = false;
@@ -514,1046 +1465,540 @@ export class GameScene extends Phaser.Scene {
           return areEqual;
         }
 
-        if (destroy === true) {
-          placeTile = true;
-          tileArray[0].setTint(0x000000);
-        } else if (
-          mapTexArray[0] === "destroy" &&
-          allAreEqual(mapTexArray) === true &&
-          road === false &&
-          bike === false
-        ) {
-          placeTile = true;
-          for (i = 0; i < tileArray.length; i++) {
-            tileArray[i].setTint(0x00ff00);
-          }
-        } else if (road === true) {
-          if (mapTexArray[0] === "destroy") {
+        if (!hover) {
+          if (destroy === true) {
+            placeTile = true;
+            tileArray[0].setTint(0x000000);
+          } else if (
+            tileArray.length >= 4 &&
+            mapTexArray[0] === "ground" &&
+            allAreEqual(mapTexArray) === true
+          ) {
+            placeTile = true;
+            for (i = 0; i < tileArray.length; i++) {
+              tileArray[i].setTint(0x00ff00);
+            }
+          } else if (road == true && mapTexArray[0] == "ground") {
+            placeTile = true;
+            tileArray[0].setTint(0x00ff00);
+          } else if (road == true && mapTexArray[0] != "ground") {
+            placeTile = false;
+            tileArray[0].setTint(0xf0000f);
+          } else if (
+            smallTile == true &&
+            mediumTile == false &&
+            mapTexArray[0] == "ground"
+          ) {
+            placeTile = true;
+            tileArray[0].setTint(0x00ff00);
+          } else if (mapTexArray[0] === "road" && bike === true) {
             placeTile = true;
             tileArray[0].setTint(0x00ff00);
           } else {
             placeTile = false;
-            tileArray[0].setTint(0xf0000f);
+            for (i = 0; i < tileArray.length; i++) {
+              tileArray[i].setTint(0xf0000f);
+            }
           }
-        } else if (mapTexArray[0] === "road" && bike === true) {
-          placeTile = true;
-          tileArray[0].setTint(0x00ff00);
         } else {
-          placeTile = false;
-          for (i = 0; i < tileArray.length; i++) {
-            tileArray[i].setTint(0xf0000f);
-          }
         }
-
-        function sendData() {
-          let info = mapTex0;
-          console.log(info);
-
-          return info;
-        }
-
-        //getInfo.text = sendData();
-
-        scene.getInfo.text = useType;
-
         return tileArray;
       });
 
-      //for pointerdown
-      this.mapTiles[i].on("pointerdown", function (pointer) {
-        if (placeTile === true && this.texture.key !== "road") {
+      tile.on("pointerdown", function (pointer) {
+        const xx = `${this.gridX}_${this.gridY}`;
+        console.log(xx);
+        const tileKey = gridToTileKey.get(`${this.gridX}_${this.gridY}`);
+
+        console.log(tileKey);
+        console.log(landUseInfo);
+        const landUseData = landUseInfo.get(tileKey);
+
+        // const tileKey = `${this.gridX}_${this.gridY}`;
+
+        // for (const [key, val] of landUseInfo.entries()) {
+        //   console.log("Map Key:", key, "Type:", typeof key);
+        // }
+
+        console.log("Land data:", landUseData);
+
+        const pX = this.x;
+        const pY = this.y;
+
+        let tile0Pos = pX + ", " + pY;
+
+        let tilePosArray = [];
+        let mapTexArray = [];
+        let tileCheckArray = [];
+        let tileaArray = [];
+
+        tilePosArray.push(tile0Pos);
+
+        let x1 = pX + tileWidth / 2;
+        let y1 = pY - tileHeight / 2;
+
+        let x2 = pX + tileWidth;
+        let y2 = pY;
+
+        let x3 = pX + tileWidth / 2;
+        let y3 = pY + tileHeight / 2;
+
+        let x4 = pX - tileWidth / 2;
+        let y4 = pY - tileHeight / 2;
+
+        let x5 = pX;
+        let y5 = pY - tileHeight;
+
+        let x6 = pX - tileWidth / 2;
+        let y6 = pY + tileHeight / 2;
+
+        let x7 = pX - tileWidth;
+        let y7 = pY;
+
+        let x8 = pX;
+        let y8 = pY + tileHeight;
+
+        let tile1Pos = x1 + ", " + y1;
+        let tile2Pos = x2 + ", " + y2;
+        let tile3Pos = x3 + ", " + y3;
+        let tile4Pos = x4 + ", " + y4;
+        let tile5Pos = x5 + ", " + y5;
+        let tile6Pos = x6 + ", " + y6;
+        let tile7Pos = x7 + ", " + y7;
+        let tile8Pos = x8 + ", " + y8;
+
+        tilePosArray.push(tile1Pos);
+        tilePosArray.push(tile2Pos);
+        tilePosArray.push(tile3Pos);
+        tilePosArray.push(tile4Pos);
+        tilePosArray.push(tile5Pos);
+        tilePosArray.push(tile6Pos);
+        tilePosArray.push(tile7Pos);
+        tilePosArray.push(tile8Pos);
+
+        const scene = this.scene;
+        // scene.triggerFloodRipple(tile.gridX, tile.gridY, 6);
+
+        // scene.saveState();
+        for (i = 0; i < tilePosArray.length; i++) {
+          let tileCheck = scene.mapTilesPos.indexOf(tilePosArray[i]);
+
+          if (tileCheck !== -1) {
+            mapTexArray.push(scene.mapTiles[tileCheck].texture.key);
+            tileCheckArray.push(scene.mapTiles[tileCheck]);
+          } else {
+          }
+        }
+
+        for (let j = 0; j < tilePosArray.length; j++) {
+          const tileCheck = scene.mapTilesPos.indexOf(tilePosArray[j]);
+
+          if (tileCheck !== -1) {
+            // console.log(scene.mapTiles[tileCheck].texture.key);
+            // console.log(scene.mapTiles[tileCheck]);
+            // mapTexArray.push(this.mapTiles[tileCheck].texture.key);
+
+            tileaArray.push(scene.mapTiles[tileCheck]);
+          } else {
+            const invalidTile = { texture: { key: "invalid" } };
+            // invalidTile.setTint(0x00000);
+            tileaArray.push(invalidTile);
+          }
+        }
+
+        const id = this.id; // Unique box.id assigned to this tile
+        let newTileType = null; // Default value if no change happens
+
+        let tile0 = scene.mapTiles.indexOf(this);
+
+        //for (let i = 0; i < tilePosArray.length; i++) {
+        //    tileCheckArray[i].setTint(0x000000);
+        //}
+
+        // Log surrounding positions (for debugging)
+        //console.log("Tile Position Array:", tilePosArray);
+
+        if (!placeTile) {
+          return;
+        }
+        if (road) {
+          tileaArray[0].setTexture("road");
+          const newNum = findClimateNumber("road");
+          climateNum += newNum;
+
+          newTileType = "road";
+
+          // Just call the reusable function
+          updateAllRoadPatterns(scene);
+        }
+
+        if (placeTile && this.texture.key !== "road" && !destroy) {
+          scene.updateClimateScore();
+
+          // const newNum = findClimateNumber(newTile);
+          // climateNum += newNum;
+          // scene.climateText.text = `Total Regional Climate Impact: ${climateNum}`;
+
           tileArray[0].setTexture(newTile, n);
+          scene.mapTiles[tile0].setTexture(newTile, 0);
+          scene.mapArray[tile0] = newTile;
+          newTileType = newTile;
 
-          if (tileArray.length >= 4 && road === false) {
-            for (i = 1; i < tileArray.length; i++) {
-              hideTileArray.push(tileArray[i]);
-            }
-
-            for (i = 0; i < hideTileArray.length; i++) {
-              hideTileArray[i].setTexture("empty");
-            }
+          if (scene.anims.exists(newTile)) {
+            scene.mapTiles[tile0].play({ key: newTile, randomFrame: true });
           } else {
-          }
-        } else {
-        }
-
-        if (destroy === true) {
-          this.play("bulldozing");
-
-          if (hideTileArray.length > 0) {
-            for (i = 0; i < hideTileArray.length; i++) {
-              hideTileArray[i].play("bulldozing");
-            }
-            hideTileArray = [];
-          }
-        } else if (wind === true) {
-          this.play("power_wind");
-        } else if (water === true) {
-          this.play("water");
-        }
-
-        //Set road sprites:
-        else if (road === true) {
-          //none
-          if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
+            scene.mapTiles[tile0].anims.stop();
           }
 
-          // straight - 1
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-          }
+          // Handle large and medium tiles (old feature)
 
-          // straight - 2
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 1);
-          }
+          if (placeTile && tileArray.length > 4) {
+            tileArray.forEach((tile, index) => {
+              tile.anims.stop();
 
-          // straight - 3
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[3].setTexture(newTile, 1);
-          }
+              if (index === 2) {
+                tile.setTexture(newTile);
+                tile.setOrigin(0.5, 0.5);
 
-          // straight - 4
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-          }
-
-          // straight (middle) - 1,4
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-          }
-
-          // straight (middle) - 2,3
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 1);
-            tileArray[3].setTexture(newTile, 1);
-          }
-
-          // road + - 5
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key == "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-          }
-
-          // road + - 6
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-          }
-
-          // road + - 7
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-          }
-
-          // road + - 8
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-          }
-
-          // road + (top turn) - 1,2
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[2].setTexture(newTile, 1);
-            tileArray[0].setTexture(newTile, 3);
-          }
-
-          // road + (bottom turn) - 3,4
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 2);
-            tileArray[3].setTexture(newTile, 1);
-          }
-
-          // road + (left turn) - 1,3
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 4);
-            tileArray[3].setTexture(newTile, 1);
-          }
-
-          // road + (right turn) - 2,4
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 5);
-            tileArray[2].setTexture(newTile, 1);
-          }
-
-          // top turn - 1,7
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[9].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[1].setTexture(newTile, 2);
-          }
-
-          // top turn - 2,6
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[10].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 2);
-          }
-
-          // bottom turn - 3,7
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[11].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[3].setTexture(newTile, 3);
-          }
-
-          // bottom turn - 4,6
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[12].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[4].setTexture(newTile, 3);
-          }
-
-          // left turn - 1,5
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key == "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[1].setTexture(newTile, 5);
-          }
-
-          // left turn - 3,8
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[3].setTexture(newTile, 5);
-          }
-
-          // right turn - 2,5
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key == "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[10].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 4);
-          }
-
-          // right turn - 4,8
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[4].setTexture(newTile, 4);
-          }
-
-          // top turn - 1,4,7
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[1].setTexture(newTile, 2);
-          }
-
-          // top turn - 2,3,6
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 2);
-            tileArray[3].setTexture(newTile, 1);
-          }
-
-          // bottom turn - 1,4,6
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[4].setTexture(newTile, 3);
-          }
-
-          // bottom turn - 2,3,7
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 1);
-            tileArray[3].setTexture(newTile, 3);
-          }
-
-          // 3 road - 1,5,7
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key == "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[9].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[1].setTexture(newTile, 7);
-          }
-
-          // 3 road - 1,7,9
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[9].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[1].setTexture(newTile, 8);
-          }
-
-          // 3 road - 2,5,6
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key == "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[10].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 8);
-          }
-
-          // 3 road - 2,5,10
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key == "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[10].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 9);
-          }
-
-          // 3 road - 2,6,10
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[10].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 7);
-          }
-
-          // 3 road - 3,7,8
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key == "road" &&
-            tileArray[11].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[3].setTexture(newTile, 6);
-          }
-
-          // 3 road - 3,7,11
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[11].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[3].setTexture(newTile, 9);
-          }
-
-          // 3 road - 4,6,8
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key == "road" &&
-            tileArray[12].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[4].setTexture(newTile, 9);
-          }
-
-          // 3 road - 4,6,12
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[12].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[4].setTexture(newTile, 6);
-          }
-
-          // 4 road - 1,5,7,9
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key == "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[9].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[1].setTexture(newTile, 10);
-          }
-
-          // 4 road - 2,5,6,10
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key == "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road" &&
-            tileArray[10].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[2].setTexture(newTile, 10);
-          }
-
-          // 4 road - 3,7,8,11
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key == "road" &&
-            tileArray[11].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 1);
-            tileArray[3].setTexture(newTile, 10);
-          }
-
-          // 4 road - 4,6,8,12
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key == "road" &&
-            tileArray[12].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            tileArray[4].setTexture(newTile, 10);
-          }
-
-          // none - 1,3,7
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key == "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            //play error sound
-          }
-
-          // none - 2,4,6
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key == "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            //play error sound
-          }
-
-          // none - 1,2,5
-          else if (
-            tileArray[1].texture.key == "road" &&
-            tileArray[2].texture.key == "road" &&
-            tileArray[3].texture.key !== "road" &&
-            tileArray[4].texture.key !== "road" &&
-            tileArray[5].texture.key == "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key !== "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            //play error sound
-          }
-
-          // none - 3,4,8
-          else if (
-            tileArray[1].texture.key !== "road" &&
-            tileArray[2].texture.key !== "road" &&
-            tileArray[3].texture.key == "road" &&
-            tileArray[4].texture.key == "road" &&
-            tileArray[5].texture.key !== "road" &&
-            tileArray[6].texture.key !== "road" &&
-            tileArray[7].texture.key !== "road" &&
-            tileArray[8].texture.key == "road"
-          ) {
-            this.play("bulldozing");
-            this.stop("bulldozing");
-            tileArray[0].setTexture(newTile, 0);
-            //play error sound
-          } else {
-          }
-        } else if (bike === true) {
-          if (tileArray[0].texture.key === "road") {
-            let f = tileArray[0].frame.name;
-            tileArray[0].setTexture("bike", f);
-          } else {
-          }
-        } else {
-        }
-      });
-
-      //for pointerout
-      this.mapTiles[i].on("pointerout", function (pointer) {
-        for (i = 0; i < tileArray.length; i++) {
-          if (tileArray.length > 0 && tileArray[i] != -1) {
-            tileArray[i].clearTint();
-          } else {
-          }
-        }
-      });
-    }
-
-    ///UISCENE
-
-    this.UIScene = new UIScene({ scene: this });
-    this.setListeners();
-
-    camGame.ignore(this.UIScene.buttons);
-
-    camInfo.ignore(this.UIScene.buttons);
-    camInfo.ignore(this.mapTiles);
-    camInfo.ignore(Background);
-
-    this.input.on(
-      "pointerdown",
-      function (pointer) {
-        if (!isDraggingSprite) {
-          // Only allow map dragging if no sprite is being dragged
-          this.dragStartX = pointer.x - this.mapContainer.x;
-          this.dragStartY = pointer.y - this.mapContainer.y;
-          this.isDragging = true;
-        }
-      },
-      this
-    );
-
-    this.input.on(
-      "pointermove",
-      function (pointer) {
-        if (this.isDragging && !isDraggingSprite) {
-          this.mapContainer.x = pointer.x - this.dragStartX;
-          this.mapContainer.y = pointer.y - this.dragStartY;
-        }
-      },
-      this
-    );
-
-    this.input.on(
-      "pointerup",
-      function () {
-        this.isDragging = false;
-        if (this.tempSprite) {
-          // Ensure to stop dragging the sprite as well
-          isDraggingSprite = false;
-        }
-      },
-      this
-    );
-
-    // KEYBOARD INPUTS:
-    //Space to Zoom,
-    var spaceBar = this.input.keyboard.addKey("SPACE");
-    var leftArrow = this.input.keyboard.addKey("LEFT");
-    var rightArrow = this.input.keyboard.addKey("RIGHT");
-    var upArrow = this.input.keyboard.addKey("UP");
-    var downArrow = this.input.keyboard.addKey("DOWN");
-
-    spaceBar.on("down", function () {
-      if (camGame.zoom == 1) {
-        camGame.setZoom(2);
-      } else if (camGame.zoom == 2) {
-        camGame.setZoom(4);
-      } else if (camGame.zoom == 4) {
-        camGame.setZoom(6);
-      } else if (camGame.zoom == 6) {
-        camGame.setZoom(8);
-      } else if (camGame.zoom == 8) {
-        camGame.setZoom(1);
-      } else {
-      }
-    });
-
-    spaceBar.on("up", function () {});
-  }
-
-  async startNewGame(boxSize, mapTilesWidth, mapTilesHeight) {
-    await this.fetchLocationAndBoundingBoxes(
-      boxSize,
-      mapTilesWidth,
-      mapTilesHeight
-    );
-  }
-
-  recreateMap(mapArray) {
-    if (this.mapContainer) {
-      this.mapContainer.destroy();
-    }
-    this.mapContainer = this.add.container(0, 0);
-    for (let y = 0; y < mapTilesHeight; y++) {
-      for (let x = 0; x < mapTilesWidth; x++) {
-        const index = y * mapTilesWidth + x;
-        const tileType = mapArray[index];
-        this.layTilesOnPlayboard(tileType, x, y);
-      }
-    }
-  }
-
-  layTilesOnPlayboard(tileType, x, y) {
-    this.getInfo.text = "processing map...";
-
-    // Calculate isometric coordinates
-    let isoX = this.startX + ((x - y) * tileWidth) / 2;
-    let isoY = this.startY + ((x + y) * tileHeight) / 2;
-
-    let tile = this.add.sprite(isoX, isoY, tileType); // Create sprite using tileType
-    let tilePosStr = isoX + ", " + isoY;
-    tile.setScale(setScale);
-    tile.setOrigin(0.5, 1);
-    tile.smoothed = false;
-    tile.play({ key: tileType, randomFrame: true });
-
-    /*if (exists(tileType) === true) {
-                    tile.play({ key: tileType, randomFrame: true });
+                // Update mapArray
+                const tileIndex = scene.mapTiles.indexOf(tile);
+                if (tileIndex !== -1) {
+                  scene.mapArray[tileIndex] = newTile;
                 }
-                else { }*/
 
-    tile.setInteractive({
-      pixelPerfect: true,
-      alphaTolerance: 1,
-    });
-    // Track tile index in mapArray
-    const tileIndex = y * mapTilesWidth + x;
+                // Update tileChanges
+                const tileId = tile.id;
+                if (tileId !== undefined) {
+                  const changeIndex = scene.tileChanges.findIndex(
+                    (t) => t.id === tileId
+                  );
+                  if (changeIndex !== -1) {
+                    scene.tileChanges[changeIndex].newTileType = newTile;
+                  } else {
+                    scene.tileChanges.push({
+                      id: tileId,
+                      newTileType: newTile,
+                    });
+                  }
+                }
 
-    // Add event listener for user interaction
-    tile.on("pointerdown", () => {
-      // Logic for adding or removing a tile, for example:
-      const newTileType = "destroy"; // Example of removing the tile
-      tile.setTexture(newTileType);
+                if (scene.anims.exists(newTile)) {
+                  tile.play({ key: newTile, randomFrame: true });
+                } else {
+                  tile.anims.stop();
+                  console.log("Tile animation not found: " + newTile);
+                }
+              } else {
+                // All other tiles in tileArray are set to "null"
+                tile.setTexture("null");
+                tile.setOrigin(0.5, 0.5);
 
-      // Update the mapArray with the new tile type
-      this.mapArray[tileIndex] = newTileType;
+                // Update mapArray
+                const tileIndex = scene.mapTiles.indexOf(tile);
+                if (tileIndex !== -1) {
+                  scene.mapArray[tileIndex] = "null";
+                }
 
-      // Optionally, save the updated mapArray to localStorage to persist changes
-      localStorage.setItem("savedMap", JSON.stringify(this.mapArray));
+                // Update tileChanges
+                const tileId = tile.id;
+                if (tileId !== undefined) {
+                  const changeIndex = scene.tileChanges.findIndex(
+                    (t) => t.id === tileId
+                  );
+                  if (changeIndex !== -1) {
+                    scene.tileChanges[changeIndex].newTileType = "null";
+                  } else {
+                    scene.tileChanges.push({ id: tileId, newTileType: "null" });
+                  }
+                }
+              }
+            });
 
-      console.log(`Tile at index ${tileIndex} updated to: ${newTileType}`);
-    });
+            // Save updated tileChanges to localStorage
+            const savedMap = JSON.parse(localStorage.getItem("savedMap")) || {};
+            savedMap.tileChanges = scene.tileChanges;
+            localStorage.setItem("savedMap", JSON.stringify(savedMap));
+            console.log("Tile changes saved to localStorage in if block.");
+            return;
+          }
 
-    this.mapContainer.add(tile);
-    this.mapTiles.push(tile);
-    this.mapTilesPos.push(tilePosStr);
-    this.mapTilesType.push(tileType);
-  }
-  // Function to fetch the location and bounding box data
-  async fetchLocationAndBoundingBoxes(boxSize, mapTilesWidth, mapTilesHeight) {
-    try {
-      const { minLat, minLon } = await fetchLocation();
-      const minLatNum = parseFloat(minLat);
-      const minLonNum = parseFloat(minLon);
+          //the medium Tile Logic
+          else if (placeTile && tileArray.length == 4) {
+            //console.log("Clearing animations for all tiles in tileArray.");
+            tileArray.forEach((tile) => {
+              tile.anims.stop();
+              tile.setTexture("null");
 
-      const initialBoundingBox = {
-        minLat: minLatNum,
-        minLon: minLonNum,
-        maxLat: minLatNum + boxSize,
-        maxLon: minLonNum + boxSize,
-      };
-      console.log(mapTilesWidth, mapTilesHeight);
+              const tileIndex = scene.mapTiles.indexOf(tile);
 
-      const countX = mapTilesWidth; // Number of horizontal subdivisions
-      const countY = mapTilesHeight; // Number of vertical subdivisions
+              if (tileIndex !== -1) {
+                scene.mapArray[tileIndex] = "null";
+              }
+              const tileId = tile.id;
+              if (tileId !== undefined) {
+                const changeIndex = scene.tileChanges.findIndex(
+                  (t) => t.id === tileId
+                );
+                if (changeIndex !== -1) {
+                  scene.tileChanges[changeIndex].newTileType = "null";
+                } else {
+                  scene.tileChanges.push({ id: tileId, newTileType: "null" });
+                }
+              }
+              console.log(tileId, newTileType);
+              console.log(this.tileChanges);
+            });
 
-      console.log(`countX: ${countX}, countY: ${countY}`);
+            const centerTile = tileArray[1];
+            const centerTileIndex = scene.mapTiles.indexOf(centerTile);
+            if (centerTileIndex !== -1) {
+              scene.mapArray[centerTileIndex] = newTile;
+            }
 
-      const results = await processBoundingBoxes(
-        initialBoundingBox,
-        countX,
-        countY
-      );
+            const centerTileId = centerTile.id; //
+            if (typeof centerTileId !== "undefined") {
+              const existingIndex = scene.tileChanges.findIndex(
+                (t) => t.id === centerTileId
+              );
+              if (existingIndex !== -1) {
+                scene.tileChanges[existingIndex].newTileType = newTile;
+              } else {
+                scene.tileChanges.push({
+                  id: centerTileId,
+                  newTileType: newTile,
+                });
+              }
+            }
 
-      this.results = results;
-      this.mapArray = results.map((result) => result);
+            const savedMap = JSON.parse(localStorage.getItem("savedMap")) || {};
+            savedMap.tileChanges = scene.tileChanges;
+            localStorage.setItem("savedMap", JSON.stringify(savedMap));
+            console.log("Setting texture and origin for the medium tile.");
 
-      localStorage.setItem("savedMap", JSON.stringify(this.mapArray));
-      console.log(this.mapArray);
-      // Recreate the map visually
-      this.recreateMap(this.mapArray);
-    } catch (error) {
-      console.error("Error fetching land use data:", error);
-      throw error;
+            tileArray[1].setTexture(newTile);
+            tileArray[1].setOrigin(0.25, 0.47);
+
+            if (scene.anims.exists(newTile)) {
+              console.log("Playing animation for medium tile:", newTile);
+              tileArray[1].play({ key: newTile, randomFrame: true });
+            } else {
+              //console.log("No animation exists for medium tile:", newTile);
+            }
+            return;
+          }
+        } else if (destroy) {
+          //for (let i = 0; i < tileCheckArray.length; i++){
+          //    tileCheckArray[i].setTint(0xf0000f);
+
+          //}
+
+          let currentSpriteWidth = tileArray[0].width;
+
+          tileArray[0].play("bulldozing");
+          tileArray[0].texture.key = "ground";
+          scene.mapTiles[tile0].texture.key = "ground";
+          scene.mapTiles[tile0].setOrigin(0.5, 0.5);
+          scene.mapArray[tile0] = "ground";
+          newTileType = "ground";
+          this.scene.updateClimateScore();
+
+          // let newClimateNum = climateNum - 1;
+          // climateNum = newClimateNum;
+          // scene.climateText.text = `Total Regional Climate Impact: ${climateNum}`;
+
+          if (currentSpriteWidth == 96) {
+            console.log("destroy large tile");
+            for (let i = 0; i < tilePosArray.length; i++) {
+              let checkForNull = scene.mapTilesPos.indexOf(tilePosArray[i]);
+              console.log(checkForNull);
+
+              scene.mapTiles[checkForNull].play("bulldozing");
+
+              scene.mapTiles[checkForNull].setTexture("ground");
+            }
+          } else if (currentSpriteWidth == 64) {
+            console.log("destroy medium tile");
+            for (let i = 0; i < 4; i++) {
+              let checkForNull = scene.mapTilesPos.indexOf(tilePosArray[i]);
+
+              console.log(checkForNull);
+
+              scene.mapTiles[checkForNull].play("bulldozing");
+
+              scene.mapTiles[checkForNull].setTexture("ground");
+            }
+          } else {
+          }
+        } else if (bike && tileArray[0].texture.key === "road") {
+          tileArray[0].setTexture("bike", tileArray[0].frame.name);
+          newTileType = "bike";
+        } else {
+        }
+        console.log("sister");
+        console.log(id, newTileType);
+        // Update mapArray (old feature)
+        if (newTileType !== null && id !== undefined) {
+          const tileIndex = scene.mapTiles.indexOf(this);
+          if (tileIndex !== -1) {
+            scene.mapArray[tileIndex] = newTileType;
+          }
+
+          // Update tileChanges array and save to localStorage
+          const changeIndex = scene.tileChanges.findIndex(
+            (tile) => tile.id === id
+          );
+
+          if (changeIndex !== -1) {
+            scene.tileChanges[changeIndex].newTileType = newTileType;
+          } else {
+            scene.tileChanges.push({ id, newTileType });
+          }
+
+          console.log("Tile changes updated:", scene.tileChanges);
+
+          const savedMap = JSON.parse(localStorage.getItem("savedMap")) || {};
+          savedMap.tileChanges = scene.tileChanges;
+          localStorage.setItem("savedMap", JSON.stringify(savedMap));
+          console.log("Tile changes saved to localStorage.");
+        }
+      });
+
+      // Pointerout listener
+      tile.on("pointerout", function (pointer) {
+        for (let j = 0; j < tileArray.length; j++) {
+          console.log(tileArray[j]);
+          tileArray[j].clearTint();
+        }
+        if (infoBool) {
+          for (let i = 0; i < scene.mapTiles.length; i++) {
+            let mapTex = scene.mapTiles[i];
+            mapTex.alpha = 1.0;
+
+            scene.getInfo.text = "";
+          }
+        }
+      });
     }
+  }
+
+  buildGrid(mapTiles, c) {
+    // Create an empty 2D array
+    let grid = Array.from({ length: c }, () => Array(c));
+
+    // Place each tile in the grid by its (gridX, gridY)
+    for (let tile of mapTiles) {
+      grid[tile.gridY][tile.gridX] = tile;
+    }
+
+    return grid;
+  }
+  triggerFloodRipple(
+    centerX,
+    centerY,
+    maxRadius = 5,
+    delayBetweenLayers = 200,
+    revertDelay = 5000
+  ) {
+    this.isFlooding = true; // prevent update loop interference
+    this.isReverting = true;
+    const floodRecords = new Map();
+
+    // Helper: Get tile at grid position
+    const getTile = (x, y) =>
+      this.mapTiles.find((t) => t.gridX === x && t.gridY === y);
+
+    // Spread water outwards
+    for (let radius = 0; radius <= maxRadius; radius++) {
+      this.time.delayedCall(radius * delayBetweenLayers, () => {
+        for (let dx = -radius; dx <= radius; dx++) {
+          for (let dy = -radius; dy <= radius; dy++) {
+            const dist = Math.abs(dx) + Math.abs(dy);
+            if (dist !== radius) continue; // only edge of current ring
+
+            const tile = getTile(centerX + dx, centerY + dy);
+            if (tile && tile.texture.key !== "water") {
+              // Save original state before flooding
+              floodRecords.set(`${tile.gridX},${tile.gridY}`, {
+                tile,
+                originalKey: tile.texture.key,
+                originalFrame: tile.frame.name,
+              });
+
+              tile.setTexture("water");
+              tile.play("water");
+            }
+          }
+        }
+      });
+    }
+
+    // Revert tiles back after the full ripple is done
+    const totalFloodTime = (maxRadius + 1) * delayBetweenLayers;
+
+    for (let radius = maxRadius; radius >= 0; radius--) {
+      this.time.delayedCall(
+        totalFloodTime +
+          revertDelay +
+          (maxRadius - radius) * delayBetweenLayers,
+        () => {
+          for (let dx = -radius; dx <= radius; dx++) {
+            for (let dy = -radius; dy <= radius; dy++) {
+              const dist = Math.abs(dx) + Math.abs(dy);
+              if (dist !== radius) continue;
+
+              const key = `${centerX + dx},${centerY + dy}`;
+              const original = floodRecords.get(key);
+              if (original) {
+                const { tile, originalKey, originalFrame } = original;
+
+                tile.setTexture(originalKey, originalFrame);
+                if (this.anims.exists(originalKey)) {
+                  tile.play({ key: originalKey, randomFrame: true });
+                }
+
+                //  also update internal state (e.g. mapArray)
+                const index = this.mapTiles.indexOf(tile);
+                if (index !== -1) {
+                  this.mapArray[index] = originalKey;
+                }
+              }
+            }
+          }
+
+          // After final radius: mark flooding done
+          if (radius === 0) {
+            this.isFlooding = false;
+          }
+        }
+      );
+    }
+  }
+
+  destroyTile(x, y) {
+    const tile = this.mapTiles.find((t) => t.gridX === x && t.gridY === y);
+    if (tile && tile.texture.key !== "destroy") {
+      tile.setTexture("destroy");
+      tile.play("bulldozing");
+    }
+  }
+
+  printClusters(clusters) {
+    clusters.forEach((cluster, clusterIndex) => {
+      console.log(`Cluster ${clusterIndex + 1}:`);
+      console.log(`  Type: ${cluster.type}`);
+      console.log("  Tiles:");
+      cluster.tiles.forEach((tile, tileIndex) => {
+        console.log(`    ${tileIndex + 1}. (${tile.x}, ${tile.y})`);
+      });
+
+      if (cluster.leftmostTile) {
+        console.log(
+          `  Leftmost Tile: (${cluster.leftmostTile.x}, ${cluster.leftmostTile.y})`
+        );
+      } else {
+        console.warn(`  Cluster ${clusterIndex + 1} has no leftmostTile.`);
+      }
+    });
   }
 
   countArtificialTiles(results, mapTilesWidth, mapTilesHeight) {
@@ -1575,196 +2020,256 @@ export class GameScene extends Phaser.Scene {
     return results;
   }
 
-  async loadMap() {
-    const savedMapString = localStorage.getItem("savedMap");
-    if (savedMapString) {
-      const mapArray = JSON.parse(savedMapString);
-      this.mapArray = mapArray;
-      this.recreateMap(mapArray);
-    } else {
-      alert("No saved map found. Starting a new game.");
-      await this.startNewGame(boxSize, mapTilesWidth, mapTilesHeight);
-    }
+  updateTileType(x, y, newTileType) {
+    const key = `${x},${y}`; // Create a unique key based on tile position
+    this.changedIndexesMap[key] = newTileType; // Save the new tile type
   }
 
-  createAnimations() {
-    // ANIMATIONS:
-    this.anims.create({
-      key: "bulldozing",
-      frames: this.anims.generateFrameNumbers("destroy", {
-        frames: [0, 1, 2, 3, 4],
-      }),
-      frameRate: 4,
-      repeat: 0,
-    });
+  getNeighborsForTile(tile, scene) {
+    tileArray = [];
 
-    this.anims.create({
-      key: "reservior",
-      frames: this.anims.generateFrameNumbers("reservoir", {
-        frames: [0, 1, 2],
-      }),
-      frameRate: 6,
-      repeat: -1,
-    });
+    const pX = tile.x;
+    const pY = tile.y;
 
-    this.anims.create({
-      key: "construction",
-      frames: this.anims.generateFrameNumbers("construction", {
-        frames: [0, 1, 2, 3, 4, 5],
-      }),
+    const tilePosArray = [];
 
-      frameRate: 6,
-      repeat: -1,
-    });
+    let x1 = pX - tileWidth / 2;
+    let y1 = pY - tileHeight / 2;
 
-    this.anims.create({
-      key: "farmland",
-      frames: this.anims.generateFrameNumbers("farmland", {
-        frames: [0, 1, 2, 3, 4, 5, 6, 7],
-      }),
-      frameRate: 4,
-      repeat: -1,
-    });
+    let x2 = pX + tileWidth / 2;
+    let y2 = pY - tileHeight / 2;
 
-    this.anims.create({
-      key: "house",
-      frames: this.anims.generateFrameNumbers("house", {
-        frames: [0, 1, 2, 3, 4, 5, 6, 7],
-      }),
-      frameRate: 4,
-      repeat: -1,
-    });
+    let x3 = pX - tileWidth / 2;
+    let y3 = pY + tileHeight / 2;
 
-    this.anims.create({
-      key: "detached",
-      frames: this.anims.generateFrameNumbers("house", {
-        frames: [0, 1, 2, 3, 4, 5, 6, 7],
-      }),
-      frameRate: 4,
-      repeat: -1,
-    });
+    let x4 = pX + tileWidth / 2;
+    let y4 = pY + tileHeight / 2;
 
-    this.anims.create({
-      key: "wetland",
-      frames: this.anims.generateFrameNumbers("wetland", { frames: [0, 1, 2] }),
-      frameRate: 6,
-      repeat: -1,
-    });
+    let tile0Pos = pX + ", " + pY;
+    let tile1Pos = x1 + ", " + y1;
+    let tile2Pos = x2 + ", " + y2;
+    let tile3Pos = x3 + ", " + y3;
+    let tile4Pos = x4 + ", " + y4;
+    // let x5 = pX;
+    // let y5 = pY - tileHeight;
 
-    this.anims.create({
-      key: "water",
-      frames: this.anims.generateFrameNumbers("water", { frames: [0, 1, 2] }),
-      frameRate: 1,
-      repeat: -1,
-    });
+    // let x6 = pX + tileWidth;
+    // let y6 = pY;
 
-    this.anims.create({
-      key: "landfill",
-      frames: this.anims.generateFrameNumbers("landfill", {
-        frames: [0, 1, 2],
-      }),
-      frameRate: 4,
-      repeat: -1,
-    });
+    // let x7 = pX - tileWidth;
+    // let y7 = pY;
 
-    this.anims.create({
-      key: "dump_station",
-      frames: this.anims.generateFrameNumbers("dump_station", {
-        frames: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-      }),
-      frameRate: 3,
-      repeat: -1,
-    });
-    this.anims.create({
-      key: "park",
-      frames: this.anims.generateFrameNumbers("park", {
-        frames: [
-          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-        ],
-      }),
-      frameRate: 3,
-      repeat: -1,
-    });
+    // let x8 = pX;
+    // let y8 = pY + tileHeight;
 
-    this.anims.create({
-      key: "pitch",
-      frames: this.anims.generateFrameNumbers("pitch", {
-        frames: [0, 1, 2, 3, 4],
-      }),
-      frameRate: 3,
-      repeat: -1,
-    });
+    // let x9 = pX - tileWidth;
+    // let y9 = pY - tileHeight;
 
-    this.anims.create({
-      key: "recreation_ground",
-      frames: this.anims.generateFrameNumbers("pitch", {
-        frames: [0, 1, 2, 3, 4],
-      }),
-      frameRate: 3,
-      repeat: -1,
-    });
+    // let x10 = pX + tileWidth;
+    // let y10 = pY - tileHeight;
 
-    this.anims.create({
-      key: "neighbourhood",
-      frames: this.anims.generateFrameNumbers("neighbourhood", {
-        frames: [
-          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-        ],
-      }),
-      frameRate: 3,
-      repeat: -1,
-    });
+    // let x11 = pX - tileWidth;
+    // let y11 = pY + tileHeight;
 
-    this.anims.create({
-      key: "residential",
-      frames: this.anims.generateFrameNumbers("residential", {
-        frames: [
-          0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-          20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
-          37, 38, 39,
-        ],
-      }),
-      frameRate: 3,
-      repeat: -1,
-    });
+    // let x12 = pX + tileWidth;
+    // let y12 = pY + tileHeight;
+    // let tile5Pos = x5 + ", " + y5;
+    // let tile6Pos = x6 + ", " + y6;
+    // let tile7Pos = x7 + ", " + y7;
+    // let tile8Pos = x8 + ", " + y8;
+    // let tile9Pos = x9 + ", " + y9;
+    // let tile10Pos = x10 + ", " + y10;
+    // let tile11Pos = x11 + ", " + y11;
+    // let tile12Pos = x12 + ", " + y12;
 
-    this.anims.create({
-      key: "scrub",
-      frames: this.anims.generateFrameNumbers("scrub", { frames: [0, 1] }),
-      frameRate: 1,
-      repeat: -1,
-    });
+    tilePosArray.push(
+      tile0Pos,
+      tile1Pos,
+      tile2Pos,
+      tile3Pos,
+      tile4Pos
+      // tile5Pos,
+      // tile6Pos,
+      // tile7Pos,
+      // tile8Pos,
+      // tile9Pos,
+      // tile10Pos,
+      // tile11Pos,
+      // tile12Pos
+    );
 
-    this.anims.create({
-      key: "retail",
-      frames: this.anims.generateFrameNumbers("retail", {
-        frames: [0, 1, 2, 3],
-      }),
-      frameRate: 1,
-      repeat: -1,
-    });
+    // console.log(tilePosArray);
+
+    // if (road) {
+    //   tilePosArray.push(
+    //     `${pX - tileWidth / 2}, ${pY - tileHeight / 2}`,
+    //     `${pX + tileWidth / 2}, ${pY - tileHeight / 2}`,
+    //     `${pX}, ${pY - tileHeight}`,
+    //     `${pX + tileWidth}, ${pY}`,
+    //     `${pX - tileWidth}, ${pY}`
+    //   );
+    // }
+
+    // Process positions
+    for (let j = 0; j < tilePosArray.length; j++) {
+      const tileCheck = this.mapTilesPos.indexOf(tilePosArray[j]);
+
+      if (tileCheck !== -1) {
+        // console.log(this.mapTiles[tileCheck].texture.key);
+        // console.log(this.mapTiles[tileCheck]);
+        // mapTexArray.push(this.mapTiles[tileCheck].texture.key);
+
+        tileArray.push(this.mapTiles[tileCheck]);
+      } else {
+        const invalidTile = { texture: { key: "invalid" } };
+        // invalidTile.setTint(0x00ff00);
+        tileArray.push(invalidTile);
+      }
+    }
+
+    return tileArray;
   }
 
   setListeners() {
+    this.emitter.on("MOVE MAP", this.MoveMap.bind(this));
+    this.emitter.on("ZOOM MAP", this.ZoomMap.bind(this));
+    this.emitter.on("ROTATE MAP", this.RotateMap.bind(this));
+    this.emitter.on("INFO MAP", this.InfoMap.bind(this));
     this.emitter.on("DESTROY", this.Destroy.bind(this));
     this.emitter.on("PLANT TREES", this.PlantTrees.bind(this));
-    this.emitter.on("BUILD 32", this.Build32.bind(this));
-    this.emitter.on("BUILD 64", this.Build64.bind(this));
-    this.emitter.on("BUILD 96", this.Build96.bind(this));
-    this.emitter.on("BUILD 128", this.Build128.bind(this));
+    //this.emitter.on("BUILD SMALL", this.BuildSmall.bind(this));
+    this.emitter.on("BUILD MEDIUM", this.BuildMedium.bind(this));
+    this.emitter.on("BUILD LARGE", this.BuildLarge.bind(this));
+    //this.emitter.on("BUILD EXTRA LARGE", this.BuildExtraLarge.bind(this));
     this.emitter.on("BUILD ROAD", this.BuildRoad.bind(this));
     this.emitter.on("BUILD BIKE LANE", this.BuildBikeLane.bind(this));
-    this.emitter.on("BUILD WATER", this.BuildWater.bind(this));
-    this.emitter.on("BUILD HOUSE", this.BuildHouse.bind(this));
-    this.emitter.on("BUILD MEADOW", this.BuildMeadow.bind(this));
+    //this.emitter.on("BUILD WATER", this.BuildWater.bind(this));
+    //this.emitter.on("BUILD HOUSE", this.BuildHouse.bind(this));
+    //this.emitter.on("BUILD MEADOW", this.BuildMeadow.bind(this));
     this.emitter.on("BUILD WIND", this.BuildWind.bind(this));
-    this.emitter.on("BUILD GREEN", this.BuildGreen.bind(this));
-    this.emitter.on("GROW FOREST", this.GrowForest.bind(this));
+    this.emitter.on("BUILD SOLAR", this.BuildSolar.bind(this));
+    //this.emitter.on("BUILD GREEN", this.BuildGreen.bind(this));
+    //this.emitter.on("GROW FOREST", this.GrowForest.bind(this));
+    this.emitter.on("GO HOME", this.GoHome.bind(this));
+    this.emitter.on("UN DO", this.UnDo.bind(this));
+  }
+  updateClimateScore() {
+    let score = 0;
+    for (let tile of this.mapTiles) {
+      score += findClimateNumber(tile.texture.key);
+    }
+
+    if (this.climateText) {
+      this.climateText.text = "Total Regional Climate Impact: " + score;
+    } else {
+      this.climateText = this.add
+        .text(640, 568, "Total Regional Climate Impact: " + score, {
+          color: "#ff6633",
+        })
+        .setShadow(1, 1, "#ff9933", 3, false, true);
+      this.cameras.main.ignore(this.climateText);
+    }
   }
 
   //EVENTS:
 
+  MoveMap() {
+    moveBool = true;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = false;
+
+    smallTile = false;
+    mediumTile = false;
+    largeTile = false;
+    xLargeTile = false;
+
+    road = false;
+    bike = false;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = false;
+
+    console.log();
+  }
+
+  ZoomMap() {
+    moveBool = false;
+    zoomBool = true;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = false;
+
+    smallTile = false;
+    mediumTile = false;
+    largeTile = false;
+    xLargeTile = false;
+
+    road = false;
+    bike = false;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = false;
+  }
+
+  RotateMap() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = true;
+    infoBool = false;
+
+    destroy = false;
+
+    smallTile = false;
+    mediumTile = false;
+    largeTile = false;
+    xLargeTile = false;
+
+    road = false;
+    bike = false;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = false;
+  }
+
+  InfoMap() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = true;
+
+    destroy = false;
+
+    smallTile = false;
+    mediumTile = false;
+    largeTile = false;
+    xLargeTile = false;
+
+    road = false;
+    bike = false;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = false;
+  }
+
   Destroy() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = true;
+
+    road = false;
+    bike = false;
+
     smallTile = true;
     mediumTile = false;
     largeTile = false;
@@ -1773,162 +2278,46 @@ export class GameScene extends Phaser.Scene {
     newTile = "destroy";
     n = 0;
 
-    destroy = true;
-    grow = false;
-    water = false;
-    wind = false;
-
     road = false;
     bike = false;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = false;
   }
 
-  PlantTrees() {
+  BuildSolar() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = false;
+
     smallTile = true;
     mediumTile = false;
     largeTile = false;
     xLargeTile = false;
 
-    newTile = "brian";
-    n = 12;
-
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
-
-    road = false;
-    bike = false;
-
-    console.log(newTile, n);
-  }
-
-  Build32() {
-    smallTile = true;
-    mediumTile = false;
-    largeTile = false;
-    xLargeTile = false;
-
-    newTile = "brian";
-    n = 3;
-
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
-
-    road = false;
-    bike = false;
-  }
-
-  Build64() {
-    smallTile = true;
-    mediumTile = true;
-    largeTile = false;
-    xLargeTile = false;
-
-    newTile = "skyscraper";
+    newTile = "power:plant (solar)";
     n = 0;
 
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
-
     road = false;
     bike = false;
+    trees = false;
+    wind = false;
+    solar = true;
+    homeBool = false;
   }
 
-  Build96() {
-    smallTile = true;
-    mediumTile = true;
-    largeTile = true;
-    xLargeTile = false;
-
-    newTile = "hydrogen";
-    n = 0;
+  BuildWind() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
 
     destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
 
-    road = false;
-    bike = false;
-  }
-
-  Build128() {
-    smallTile = true;
-    mediumTile = true;
-    largeTile = true;
-    xLargeTile = true;
-
-    newTile = "solar";
-    n = 0;
-
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
-
-    road = false;
-    bike = false;
-  }
-
-  BuildRoad() {
-    smallTile = true;
-    mediumTile = false;
-    largeTile = false;
-    xLargeTile = false;
-
-    newTile = "road";
-    n = 0;
-
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
-
-    road = true;
-    bike = false;
-  }
-
-  BuildBikeLane() {
-    smallTile = true;
-    mediumTile = false;
-    largeTile = false;
-    xLargeTile = false;
-
-    newTile = "bike";
-    n = 0;
-
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
-
-    road = false;
-    bike = true;
-  }
-
-  BuildHouse() {
-    smallTile = true;
-    mediumTile = false;
-    largeTile = false;
-    xLargeTile = false;
-
-    newTile = "house_b";
-    n = 0;
-
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
-
-    road = false;
-    bike = false;
-  }
-
-  BuildWater() {
     smallTile = true;
     mediumTile = false;
     largeTile = false;
@@ -1937,88 +2326,205 @@ export class GameScene extends Phaser.Scene {
     newTile = "wind";
     n = 0;
 
-    destroy = false;
-    grow = false;
-    water = true;
-    wind = false;
-
     road = false;
     bike = false;
-  }
-
-  BuildMeadow() {
-    smallTile = true;
-    mediumTile = false;
-    largeTile = false;
-    xLargeTile = false;
-
-    newTile = "brian";
-    n = 8;
-
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
-
-    road = false;
-    bike = false;
-  }
-
-  BuildWind() {
-    smallTile = true;
-    mediumTile = false;
-    largeTile = false;
-    xLargeTile = false;
-
-    newTile = "brian";
-    n = 13;
-
-    destroy = false;
-    grow = false;
-    water = false;
+    trees = false;
     wind = true;
-
-    road = false;
-    bike = false;
+    solar = false;
+    homeBool = false;
   }
 
-  BuildGreen() {
+  PlantTrees() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = false;
+
     smallTile = true;
     mediumTile = false;
     largeTile = false;
     xLargeTile = false;
 
-    newTile = "brian";
-    n = 9;
-
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
+    newTile = "wood";
+    n = 0;
 
     road = false;
     bike = false;
+    trees = true;
+    wind = false;
+    solar = false;
+    homeBool = false;
   }
 
-  GrowForest() {
+  //BuildSmall() {
+  //  smallTile = true;
+  //  mediumTile = false;
+  //  largeTile = false;
+  //  xLargeTile = false;
+
+  //  newTile = "wind";
+  //  n = 0;
+
+  //  destroy = false;
+  //  grow = false;
+  //  water = false;
+  //  wind = true;
+
+  //  road = false;
+  //  bike = false;
+  //}
+
+  BuildMedium() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = false;
+
     smallTile = true;
     mediumTile = true;
     largeTile = false;
     xLargeTile = false;
 
-    newTile = "green_building";
+    newTile = "green_apartments";
     n = 0;
-
-    destroy = false;
-    grow = false;
-    water = false;
-    wind = false;
 
     road = false;
     bike = false;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = false;
+  }
+
+  BuildLarge() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = false;
+
+    smallTile = true;
+    mediumTile = true;
+    largeTile = true;
+    xLargeTile = false;
+
+    newTile = "hydrogen";
+    n = 0;
+
+    road = false;
+    bike = false;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = false;
+  }
+
+  //BuildExtraLarge() {
+  //  smallTile = true;
+  //  mediumTile = true;
+  //  largeTile = true;
+  //  xLargeTile = true;
+
+  //  newTile = "solar";
+  //  n = 0;
+
+  //  destroy = false;
+  //  grow = false;
+  //  water = false;
+  //  wind = false;
+
+  //  road = false;
+  //  bike = false;
+  //}
+  UnDo() {
+    console.log("Moving back to previous state");
+    this.undofunction();
+  }
+
+  BuildRoad() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = false;
+
+    smallTile = true;
+    mediumTile = false;
+    largeTile = false;
+    xLargeTile = false;
+
+    newTile = "road";
+    n = 0;
+
+    road = true;
+    bike = false;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = false;
+  }
+
+  BuildBikeLane() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = false;
+
+    smallTile = true;
+    mediumTile = false;
+    largeTile = false;
+    xLargeTile = false;
+
+    newTile = "road";
+    n = 0;
+
+    road = false;
+    bike = true;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = false;
+  }
+
+  GoHome() {
+    moveBool = false;
+    zoomBool = false;
+    rotateBool = false;
+    infoBool = false;
+
+    destroy = false;
+
+    smallTile = true;
+    mediumTile = false;
+    largeTile = false;
+    xLargeTile = false;
+    homeBool = false;
+
+    newTile = "road";
+    n = 0;
+
+    road = false;
+    bike = false;
+    trees = false;
+    wind = false;
+    solar = false;
+    homeBool = true;
   }
 
   //UPDATES:
+  update() {
+    if (this.isFlooding || this.isReverting) return;
 
-  update() {}
+    for (let i = 0; i < this.mapTiles.length; i++) {
+      this.mapArray[i] = this.mapTiles[i].texture.key;
+    }
+  }
 }
