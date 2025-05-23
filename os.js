@@ -184,7 +184,7 @@ async function fetchLocationUsingApi(lat, lon) {
 
   try {
     const response = await fetch(
-      `${backendBaseUrl}closestBbox?lat=${lat}&lon=${lon}`
+      `${backendBaseUrl}/closestBbox?lat=${lat}&lon=${lon}`
     );
     //if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const boundingBoxData = await response.json();
