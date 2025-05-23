@@ -4,7 +4,7 @@ import { getLocation } from "./location.js"; // Adjust path as necessary
 // const landUseMap = new Map(); // Key: Tile ID or Coordinates, Value: landUses data
 export const landUseInfo = new Map();
 const API_KEY = "349b2ad7a8cbe62ab39fc0097c80adea"; // Replace with your actual API key
-
+const backendBaseUrl = "https://ultimatesim-backend.onrender.com";
 export async function fetchWeatherAlerts(lat, lon) {
   const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
 
@@ -184,7 +184,7 @@ async function fetchLocationUsingApi(lat, lon) {
 
   try {
     const response = await fetch(
-      `http://localhost:8800/closestBbox?lat=${lat}&lon=${lon}`
+      `${backendBaseUrl}closestBbox?lat=${lat}&lon=${lon}`
     );
     //if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const boundingBoxData = await response.json();
@@ -205,7 +205,7 @@ async function fetchLocationUsingApi(lat, lon) {
 }
 
 async function loadtheMap(boundingBoxes) {
-  const url = `http://localhost:8800/initialBox`;
+  const url = `${backendBaseUrl}/initialBox`;
 
   try {
     const response = await fetch(url, {
