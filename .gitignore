@@ -1,3 +1,15 @@
 fetching/
 .env
 node_modules/
+**/node_modules/
+.env
+.env.local
+.env.*.local
+# macOS metadata files
+.DS_Store
+
+# editor/OS clutter
+*.log
+*.swp
+.vscode/
+.idea/
