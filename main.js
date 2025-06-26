@@ -1,6 +1,7 @@
 ﻿// main.js
 import { GameScene } from "./scenes/GameScene.js";
 import { TitleScene } from "./scenes/TitleScene.js";
+import NewspaperScene from "./scenes/NewspaperScene.js";
 
 // import { DataScene } from './scenes/DataScene.js';
 // import { fetchLandUseInBoundingBox } from './os.js'; // Adjusted path
@@ -14,7 +15,7 @@ window.onload = function () {
     height: 600,
     backgroundColor: 0x000000,
     autoCenter: true,
-    scene: [TitleScene, GameScene],
+    scene: [TitleScene, GameScene, NewspaperScene],
     parent: "container",
 
     antialias: false,

@@ -8,6 +8,8 @@ import { updateAllRoadPatterns } from "../connector.js";
 import { findClimateNumber } from "../tileUtils.js";
 import { applyWaterOnDominantNoDataSide } from "../tileUtils.js";
 import { fixBeachTileFrames } from "../tileUtils.js";
+import { CitySimulation } from "../simulation/CitySimulation.js";
+import { EconomySimulation } from "../simulation/EconomySimulation.js";
 
 const spriteWidth = 32;
 const spriteHeight = spriteWidth / 2;
@@ -54,7 +56,7 @@ const gridToTileKey = new Map();
 const city = window.city;
 const state = window.state;
 
-let mapTilesWidth = 30;
+let mapTilesWidth = 20;
 let mapTilesHeight = mapTilesWidth;
 
 const initialGridSize = mapTilesWidth;
@@ -91,6 +93,10 @@ export class GameScene extends Phaser.Scene {
     this.secondLoad = false;
     this.isaReverting = false;
     // this.applyPatternAction = this.applyPatternAction.bind(this);
+
+    this._history = [];   // array of snapshots
+    this._historyMax = 6; // keep at most 5
+    this._redo = [];   // stack for redo snapshots
   }
 
   preload() {
@@ -191,7 +197,7 @@ export class GameScene extends Phaser.Scene {
     createAnimations(this);
 
     this.getInfo = this.add
-      .text(30, 568, "", {
+      .text(30, 548, "", {
         color: "#ff6633",
       })
       .setShadow(1, 1, "#ff9933", 3, false, true);
@@ -253,12 +259,18 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.climateText = this.add
-      .text(640, 568, "Total Regional Climate Impact: " + climateNum, {
+      .text(30, 556, "Total Regional Climate Impact: " + climateNum, {
         //color: '#00ff00'
         color: "#ff6633",
       })
       .setShadow(1, 1, "#ff9933", 3, false, true);
     camGame.ignore(this.climateText);
+
+    // initialise city simulation module
+    this.citySim = new CitySimulation(this);
+
+    // economy / budget system (depends on citySim for surplus info)
+    this.economySim = new EconomySimulation(this, this.citySim);
 
     // MAP INTERACTIVITIY:
     // (see TileArrayTempate.png for tile numbers)
@@ -624,7 +636,7 @@ export class GameScene extends Phaser.Scene {
             //// Stop old animation and temporarily null out the texture
             //oldTile.anims.stop();
             //oldTile.setTexture("null");
-            //oldTile.setOrigin(0.5, 1);
+            //oldTile.setOrigin(0.5, 0.5);
 
             //let gridX = oldTile.gridX;
             //let gridY = oldTile.gridY;
@@ -787,6 +799,8 @@ export class GameScene extends Phaser.Scene {
 
     this.mapTilesType.push(finalTileType);
     updateAllRoadPatterns(this);
+    // capture state after laying a tile during map generation or player placement
+    this.saveState();
   }
 
   async fetchLocationAndBoundingBoxes(boxSize, mapTilesWidth, mapTilesHeight) {
@@ -841,59 +855,6 @@ export class GameScene extends Phaser.Scene {
         }
       }
     }
-  }
-  startRandomTornado(steps = 20, delay = 200) {
-    const directions = [
-      { dx: 0, dy: -1 }, // up
-      { dx: 1, dy: 0 }, // right
-      { dx: 0, dy: 1 }, // down
-      { dx: -1, dy: 0 }, // left
-    ];
-
-    let x = Phaser.Math.Between(0, mapTilesWidth - 1);
-    let y = Phaser.Math.Between(0, mapTilesHeight - 1);
-
-    let stepCount = 0;
-
-    const tornadoStep = () => {
-      const tile = this.mapTiles.find((t) => t.gridX === x && t.gridY === y);
-      if (tile) {
-        tile.setTexture("destroy");
-        tile.play("bulldozing");
-        //destroy neighbor tiles
-        const neighbors = [
-          [x + 1, y],
-          [x - 1, y],
-          [x, y + 1],
-          [x, y - 1],
-        ];
-        for (let [nx, ny] of neighbors) {
-          const neighborTile = this.mapTiles.find(
-            (t) => t.gridX === nx && t.gridY === ny
-          );
-          if (neighborTile) {
-            neighborTile.setTexture("destroy");
-            neighborTile.play("bulldozing");
-          }
-        }
-      }
-
-      // Choose a random direction and move
-      const dir = Phaser.Math.RND.pick(directions);
-      x += dir.dx;
-      y += dir.dy;
-
-      // Clamp within bounds
-      x = Phaser.Math.Clamp(x, 0, mapTilesWidth - 1);
-      y = Phaser.Math.Clamp(y, 0, mapTilesHeight - 1);
-
-      stepCount++;
-      if (stepCount < steps) {
-        this.time.delayedCall(delay, tornadoStep);
-      }
-    };
-
-    tornadoStep();
   }
 
   async renderGridInSpiral(initialBox, gridWidth, gridHeight, boxSize) {
@@ -977,73 +938,6 @@ export class GameScene extends Phaser.Scene {
     return tileTypesArray;
   }
 
-  // async renderGridInSpiral(initialBox, gridWidth, gridHeight, boxSize) {
-  //   // Initialize an array to store tile types and their positions
-
-  //   const gWidth = this.sys.game.canvas.width;
-  //   const gHeight = this.sys.game.canvas.height;
-
-  //   this.startX = gWidth / 2;
-  //   this.startY = gHeight / 2;
-
-  //   const tileTypesArray = [];
-  //   const tileData = [];
-  //   mapTilesWidth = gridWidth;
-  //   mapTilesHeight = gridHeight;
-  //   const pseudoTiles = [];
-  //   // Process each bounding box
-  //   for await (const { tileType, box } of processBoundingBoxes(
-  //     initialBox,
-  //     gridWidth,
-  //     gridHeight
-  //   )) {
-  //     const x = box.x;
-  //     const y = box.y;
-
-  //     //console.log(box.id);
-  //     tileData.push({ box, tileType });
-  //     // Render the tile on the playboard
-
-  //     this.layTilesOnPlayboard(tileType, x, y, box);
-
-  //     this.mapContainer.sort("y");
-
-  //     // Add the tile type and position to tileTypesArray
-  //     tileTypesArray.push({ x, y, type: tileType });
-  //   }
-  //   this.addTileListeners();
-
-  //   updateAllRoadPatterns(this);
-  //   const simplifiedTileData = tileData.map(({ box, tileType }) => ({
-  //     x: box.x,
-  //     y: box.y,
-  //     id: box.id,
-  //     tileType: tileType,
-  //   }));
-
-  //   // Ensure the data is valid before saving
-  //   if (!Array.isArray(simplifiedTileData) || simplifiedTileData.length === 0) {
-  //     console.error(
-  //       "Error: simplifiedTileData is empty or invalid!",
-  //       simplifiedTileData
-  //     );
-  //     return; // Prevent saving invalid data
-  //   }
-  //   // Save to localStorage
-  //   localStorage.setItem(
-  //     "savedMap",
-  //     JSON.stringify({
-  //       tiles: simplifiedTileData,
-  //       gridWidth: gridWidth,
-  //       gridHeight: gridHeight,
-  //       tileChanges: this.tileChanges,
-  //     })
-  //   );
-
-  //   const checkSavedData = localStorage.getItem("savedMap");
-
-  //   return tileTypesArray;
-  // }
   startRandomTornado(steps = 20, delay = 200) {
     const directions = [
       { dx: 0, dy: -1 },
@@ -1097,6 +991,13 @@ export class GameScene extends Phaser.Scene {
         this.time.delayedCall(delay, moveTornado);
       } else {
         tornadoSprite.destroy(); // Remove sprite after animation
+
+        // Notify player with a newspaper popup
+        this.showNewspaper('Tornado Strikes!', [
+          'A violent tornado has torn through the region,',
+          'leaving a trail of destroyed tiles in its wake.',
+          'Rebuild quickly to restore your city!'
+        ]);
       }
     };
 
@@ -1628,6 +1529,11 @@ export class GameScene extends Phaser.Scene {
 
           newTileType = "road";
 
+          // cost for road
+          if (scene.economySim) {
+            scene.economySim.chargeFor("road");
+          }
+
           // Just call the reusable function
           updateAllRoadPatterns(scene);
         }
@@ -1860,6 +1766,44 @@ export class GameScene extends Phaser.Scene {
           savedMap.tileChanges = scene.tileChanges;
           localStorage.setItem("savedMap", JSON.stringify(savedMap));
           console.log("Tile changes saved to localStorage.");
+          // snapshot after successful player change
+          scene.saveState();
+        }
+
+        // charge construction cost
+        if (this.scene.economySim && newTileType) {
+          this.scene.economySim.chargeFor(newTileType);
+        }
+
+        // immediate sim refresh for power/budget
+        this.scene.citySim?.immediateUpdate();
+
+        // Update mapArray (old feature)
+        if (newTileType !== null && id !== undefined) {
+          const tileIndex = scene.mapTiles.indexOf(this);
+          if (tileIndex !== -1) {
+            scene.mapArray[tileIndex] = newTileType;
+          }
+
+          // Update tileChanges array and save to localStorage
+          const changeIndex = scene.tileChanges.findIndex(
+            (tile) => tile.id === id
+          );
+
+          if (changeIndex !== -1) {
+            scene.tileChanges[changeIndex].newTileType = newTileType;
+          } else {
+            scene.tileChanges.push({ id, newTileType });
+          }
+
+          console.log("Tile changes updated:", scene.tileChanges);
+
+          const savedMap = JSON.parse(localStorage.getItem("savedMap")) || {};
+          savedMap.tileChanges = scene.tileChanges;
+          localStorage.setItem("savedMap", JSON.stringify(savedMap));
+          console.log("Tile changes saved to localStorage.");
+          // snapshot after successful player change
+          scene.saveState();
         }
       });
 
@@ -1979,6 +1923,7 @@ export class GameScene extends Phaser.Scene {
     if (tile && tile.texture.key !== "destroy") {
       tile.setTexture("destroy");
       tile.play("bulldozing");
+      this.saveState();
     }
   }
 
@@ -2023,6 +1968,7 @@ export class GameScene extends Phaser.Scene {
   updateTileType(x, y, newTileType) {
     const key = `${x},${y}`; // Create a unique key based on tile position
     this.changedIndexesMap[key] = newTileType; // Save the new tile type
+    this.saveState();
   }
 
   getNeighborsForTile(tile, scene) {
@@ -2152,6 +2098,9 @@ export class GameScene extends Phaser.Scene {
     //this.emitter.on("GROW FOREST", this.GrowForest.bind(this));
     this.emitter.on("GO HOME", this.GoHome.bind(this));
     this.emitter.on("UN DO", this.UnDo.bind(this));
+    this.input.keyboard.on('keydown-U', () => this.undoState());
+    // key 'Q' for redo
+    this.input.keyboard.on('keydown-Q', () => this.redoState());
   }
   updateClimateScore() {
     let score = 0;
@@ -2159,16 +2108,20 @@ export class GameScene extends Phaser.Scene {
       score += findClimateNumber(tile.texture.key);
     }
 
+    this.currentClimateScore = score;  // store for other systems
+
     if (this.climateText) {
       this.climateText.text = "Total Regional Climate Impact: " + score;
     } else {
       this.climateText = this.add
-        .text(640, 568, "Total Regional Climate Impact: " + score, {
+        .text(30, 556, "Total Regional Climate Impact: " + score, {
           color: "#ff6633",
         })
         .setShadow(1, 1, "#ff9933", 3, false, true);
       this.cameras.main.ignore(this.climateText);
     }
+
+    return score;
   }
 
   //EVENTS:
@@ -2442,9 +2395,9 @@ export class GameScene extends Phaser.Scene {
   //  bike = false;
   //}
   UnDo() {
-    console.log("Moving back to previous state");
-    this.undofunction();
-  }
+     console.log("Moving back to previous state");
+     this.undoState();
+   }
 
   BuildRoad() {
     moveBool = false;
@@ -2517,6 +2470,84 @@ export class GameScene extends Phaser.Scene {
     wind = false;
     solar = false;
     homeBool = true;
+  }/* ─────── state HISTORY (5-deep) ─────── */
+  saveState() {
+    // build a lightweight snapshot (NO live Phaser objects)
+    const snap = {
+      tiles: this.mapTiles.map(t => ({
+        gridX:  t.gridX,
+        gridY:  t.gridY,
+        x:      t.x,
+        y:      t.y,
+        key:    t.texture.key,
+        frame:  t.frame?.name ?? 0,
+        type:   t.type ?? null,
+        id:     t.id   ?? null
+      })),
+      mapTilesPos  : [...this.mapTilesPos],
+      mapTilesType : [...this.mapTilesType],
+      mapArray     : [...this.mapArray],
+      tileChanges  : JSON.parse(JSON.stringify(this.tileChanges)),
+      changedIdx   : { ...(this.changedIndexesMap || {}) },
+      climateNum   : climateNum
+    };
+
+    // push & trim (FIFO)
+    this._history.push(snap);
+    if (this._history.length > this._historyMax) this._history.shift();
+    // clearing redo stack because a brand-new change invalidates forward history
+    if (this._redo) this._redo.length = 0;
+  }
+
+  undoState() {
+    // store a snapshot for redo before moving back
+    if (this._redo) {
+      const currentSnap = this.__captureSnapshot();
+      this._redo.push(currentSnap);
+    }
+    // need at least two snapshots (current + previous)
+    if (this._history.length < 2) return;
+
+    // drop current, fetch previous
+    this._history.pop();
+    const snap = this._history[this._history.length - 1];
+
+    // REBUILD BOARD  ──────────────────────────────────────
+    // 1. destroy current sprites
+    this.mapTiles.forEach(s => s.destroy());
+    this.mapTiles.length = 0;
+
+    // 2. recreate sprites
+    snap.tiles.forEach(d => {
+      const s = this.add.sprite(d.x, d.y, d.key, d.frame)
+                     .setScale(setScale)
+                     .setOrigin(d.key === "green_apartments" ? 0.25 : 0.5,
+                                d.key === "green_apartments" ? 0.47 : 0.5)
+                     .setInteractive({ pixelPerfect:true, alphaTolerance:1 });
+      s.gridX = d.gridX;
+      s.gridY = d.gridY;
+      s.type  = d.type;
+      s.id    = d.id;
+      this.mapContainer.add(s);
+      this.mapTiles.push(s);
+    });
+
+    // 3. restore parallel structures
+    this.mapTilesPos      = [...snap.mapTilesPos];
+    this.mapTilesType     = [...snap.mapTilesType];
+    this.mapArray         = [...snap.mapArray];
+    this.tileChanges      = JSON.parse(JSON.stringify(snap.tileChanges));
+    this.changedIndexesMap= { ...snap.changedIdx };
+    climateNum            = snap.climateNum;
+
+    // 4. re-compute visuals / score
+    this.mapContainer.sort('y');
+    this.updateClimateScore?.();
+    updateAllRoadPatterns?.(this);
+    fixBeachTileFrames?.(this);
+
+    // 5. re-attach tile listeners
+    this.addTileListeners?.();
   }
 
   //UPDATES:
@@ -2526,5 +2557,90 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < this.mapTiles.length; i++) {
       this.mapArray[i] = this.mapTiles[i].texture.key;
     }
+  }
+
+  // Internal utility that captures the current board state without touching history/redo
+  __captureSnapshot() {
+    return {
+      tiles: this.mapTiles.map(t => ({
+        gridX: t.gridX,
+        gridY: t.gridY,
+        x: t.x,
+        y: t.y,
+        key: t.texture.key,
+        frame: t.frame?.name ?? 0,
+        type: t.type ?? null,
+        id: t.id ?? null
+      })),
+      mapTilesPos: [...this.mapTilesPos],
+      mapTilesType: [...this.mapTilesType],
+      mapArray: [...this.mapArray],
+      tileChanges: JSON.parse(JSON.stringify(this.tileChanges)),
+      changedIdx: { ...(this.changedIndexesMap || {}) },
+      climateNum: climateNum
+    };
+  }
+
+  redoState() {
+    if (!this._redo || this._redo.length === 0) return; // nothing to redo
+
+    const snap = this._redo.pop();
+    this._history.push(snap);
+    if (this._history.length > this._historyMax) this._history.shift();
+
+    // Rebuild board from snapshot
+    this.mapTiles.forEach(s => s.destroy());
+    this.mapTiles.length = 0;
+
+    snap.tiles.forEach(d => {
+      const s = this.add.sprite(d.x, d.y, d.key, d.frame)
+                     .setScale(setScale)
+                     .setOrigin(d.key === "green_apartments" ? 0.25 : 0.5,
+                                d.key === "green_apartments" ? 0.47 : 0.5)
+                     .setInteractive({ pixelPerfect:true, alphaTolerance:1 });
+      s.gridX = d.gridX;
+      s.gridY = d.gridY;
+      s.type  = d.type;
+      s.id    = d.id;
+      this.mapContainer.add(s);
+      this.mapTiles.push(s);
+    });
+
+    this.mapTilesPos      = [...snap.mapTilesPos];
+    this.mapTilesType     = [...snap.mapTilesType];
+    this.mapArray         = [...snap.mapArray];
+    this.tileChanges      = JSON.parse(JSON.stringify(snap.tileChanges));
+    this.changedIndexesMap= { ...snap.changedIdx };
+    climateNum            = snap.climateNum;
+
+    this.mapContainer.sort('y');
+    this.updateClimateScore?.();
+    updateAllRoadPatterns?.(this);
+    fixBeachTileFrames?.(this);
+
+    this.addTileListeners?.();
+  }
+
+  // Extend undoState to push snapshot onto redo stack (additions only)
+  undoStateDuplicate() {
+    // store current view in redo stack before moving back
+    if (this._redo && typeof this.__captureSnapshot === 'function') {
+      this._redo.push(this.__captureSnapshot());
+    }
+    // ... existing code ...
+  }
+ 
+  /* ─────── end HISTORY helpers ─────── */
+
+  showNewspaper(headline, bodyLines) {
+    // Pause gameplay and launch the overlay scene
+    this.scene.pause();
+    this.scene.launch('newspaper', {
+      headline,
+      bodyLines,
+      onClose: () => {
+        this.scene.resume();
+      },
+    });
   }
 }

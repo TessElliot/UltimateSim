@@ -399,6 +399,7 @@ export function preloadAssets(scene) {
   scene.load.image("skyscraper", "assets/building.png");
   scene.load.image("solar", "assets/solar.png");
   scene.load.image("hydrogen", "assets/hydrogen.png");
+  scene.load.image("paper_bg", "assets/paper_bg.png");
 
   // Add the listener to handle the 'complete' event
   scene.load.once("complete", () => {

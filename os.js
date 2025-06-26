@@ -4,7 +4,8 @@ import { getLocation } from "./location.js"; // Adjust path as necessary
 // const landUseMap = new Map(); // Key: Tile ID or Coordinates, Value: landUses data
 export const landUseInfo = new Map();
 const API_KEY = "349b2ad7a8cbe62ab39fc0097c80adea"; // Replace with your actual API key
-const backendBaseUrl = "https://ultimatesim-backend.onrender.com";
+// const backendBaseUrl = "https://ultimatesim-backend.onrender.com";
+const backendBaseUrl = "http://localhost:8800";
 export async function fetchWeatherAlerts(lat, lon) {
   const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
 
