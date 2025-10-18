@@ -1,18 +1,18 @@
-﻿export function updateAllRoadPatterns(scene) {
+﻿export function updateAllRailPatterns(scene) {
   let flaggedTiles = [];
 
   for (let i = 0; i < scene.mapTiles.length; i++) {
     const tile = scene.mapTiles[i];
 
     if (
-      (tile.texture.key === "road" || tile.texture.key === "coastline") &&
+      tile.texture.key === "railway" &&
       !tile.flagged
     ) {
       const tileArray = scene.getNeighborsForTile(tile, scene);
 
       for (let j = 1; j < tileArray.length; j++) {
         if (
-          tileArray[j].texture.key === "road" &&
+          tileArray[j].texture.key === "railway" &&
           !flaggedTiles.includes(tileArray[j])
         ) {
           tileArray[j].flagged = true;
@@ -20,13 +20,13 @@
         }
       }
 
-      checkWhichPatternHoldsTrue(scene, tileArray, "road");
+      checkWhichPatternHoldsTrue(scene, tileArray, "railway");
 
       while (flaggedTiles.length > 0) {
         for (let k = flaggedTiles.length - 1; k >= 0; k--) {
           const flaggedTile = flaggedTiles[k];
           const neighbors = scene.getNeighborsForTile(flaggedTile, scene);
-          checkWhichPatternHoldsTrue(scene, neighbors, "road");
+          checkWhichPatternHoldsTrue(scene, neighbors, "railway");
           flaggedTile.flagged = false;
           flaggedTiles.splice(k, 1);
         }
@@ -112,12 +112,12 @@ function checkWhichPatternHoldsTrue(scene, tileArray, newTile) {
 
 function isPatternMatched(tileArray, pattern) {
   const matched = pattern.indices.every(
-    (index) => tileArray[index] && tileArray[index].texture.key === "road"
+    (index) => tileArray[index] && tileArray[index].texture.key === "railway"
   );
 
   const others = [1, 2, 3, 4].filter((i) => !pattern.indices.includes(i));
   const unmatched = others.every(
-    (index) => tileArray[index] && tileArray[index].texture.key !== "road"
+    (index) => tileArray[index] && tileArray[index].texture.key !== "railway"
   );
 
   return matched && unmatched;
@@ -128,7 +128,7 @@ function applyPatternAction(scene, pattern, tileArray, newTile) {
     const tile = tileArray[index];
     if (!tile) continue;
 
-    if (tile.texture.key === "road" || tile.texture.key === "coastline") {
+    if (tile.texture.key === "railway") {
       tile.setTexture(tile.texture.key, textureIndex);
     }
   }

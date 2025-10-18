@@ -1,4 +1,5 @@
 export const landUseTypesDict = {};
+import { fetchLandUseInBoundingBox } from './overpass.js';
 // //import { titleSceneInstance } from "./scenes/TitleScene.js";
 import { getLocation } from "./location.js"; // Adjust path as necessary
 // const landUseMap = new Map(); // Key: Tile ID or Coordinates, Value: landUses data
@@ -140,7 +141,8 @@ function generateSpiralBoundingBoxes(
     const newMinLat = minLat + (y - Math.floor(countY / 2)) * latDiff;
     const newMinLon = minLon + (x - Math.floor(countX / 2)) * lonDiff;
     const newMaxLat = newMinLat + latDiff;
-    const newMaxLon = newMinLon + lonDiff;
+      const newMaxLon = newMinLon + lonDiff;
+      console.log('Type of newMinLat:', typeof newMinLat);
     const id = `${newMinLat.toFixed(6)}_${newMinLon.toFixed(
       6
     )}_${newMaxLat.toFixed(6)}_${newMaxLon.toFixed(6)}`;
@@ -169,7 +171,6 @@ function generateSpiralBoundingBoxes(
       }
     }
   }
-  console.log("here see");
   console.log(boundingBoxes);
 
   return boundingBoxes;
@@ -178,31 +179,40 @@ function generateSpiralBoundingBoxes(
 const url = "";
 
 async function fetchLocationUsingApi(lat, lon) {
-  // console.log(lat, lon);
-  ///this function will trigger api to get the nearest bouding box of "initial box", then set that bounding box as "initial box"
-  // which is already in database..hence all the a=subsequesnt database's bouding box will exactly match with the ones generted by generateBOudingbOx function"
-  //then we can just fetch the respective landuse type from database and yield them one by one.
+    try {
+        const response = await fetch(
+            `${backendBaseUrl}/closestBbox?lat=${lat}&lon=${lon}`
+        );
+        const boundingBoxData = await response.json();
 
-  try {
-    const response = await fetch(
-      `${backendBaseUrl}/closestBbox?lat=${lat}&lon=${lon}`
-    );
-    //if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const boundingBoxData = await response.json();
-    // Extract the first (and only) result from the array
-    const closestBbox = boundingBoxData[0];
+        if (!boundingBoxData || boundingBoxData.length === 0) {
+            return null;
+        }
 
-    // Return as an object with the required properties
-    return {
-      minLat: closestBbox.minLat,
-      maxLat: closestBbox.maxLat,
-      minLon: closestBbox.minLon,
-      maxLon: closestBbox.maxLon,
-    };
-  } catch (error) {
-    console.log(error);
-    return null;
-  }
+        const closestBbox = boundingBoxData[0];
+
+        // Calculate distance to verify it's actually close
+        const distance = Math.sqrt(
+            Math.pow(closestBbox.minLat - lat, 2) +
+            Math.pow(closestBbox.minLon - lon, 2)
+        );
+
+        // If too far away (> 0.01 degrees ~1km), return null
+        if (distance > 0.01) {
+            console.log(`Closest tile too far: ${distance.toFixed(4)} degrees`);
+            return null;
+        }
+
+        return {
+            minLat: closestBbox.minLat,
+            maxLat: closestBbox.maxLat,
+            minLon: closestBbox.minLon,
+            maxLon: closestBbox.maxLon,
+        };
+    } catch (error) {
+        console.log(error);
+        return null;
+    }
 }
 
 async function loadtheMap(boundingBoxes) {
@@ -231,64 +241,164 @@ async function loadtheMap(boundingBoxes) {
 }
 
 export async function* processBoundingBoxes(initialBox, countX, countY) {
-  try {
-    // lat = 35.202991;
-    // lon = 97.425428;
-    console.log("helllow");
+    try {
+        const lat = initialBox.minLat;
+        const lon = initialBox.minLon;
+        console.log("Starting location:", lat, lon);
 
-    const lat = initialBox.minLat;
-    const lon = initialBox.minLon;
-    console.log(lat, lon);
+        // Step 1: Try to find closest pre-computed tile in database
+        let FinitialBox = null;
+        let useOverpass = false;
 
-    const FinitialBox = await fetchLocationUsingApi(lat, lon);
-    console.log("Hello");
-    console.log(
-      FinitialBox.minLat,
-      FinitialBox.minLon,
-      FinitialBox.maxLat,
-      FinitialBox.maxLon
-    );
+        try {
+            FinitialBox = await fetchLocationUsingApi(lat, lon);
+            if (FinitialBox) {
+                console.log("✅ Found database match:", FinitialBox.minLat, FinitialBox.minLon);
+            } else {
+                console.log("❌ No database match - location not pre-computed");
+                useOverpass = true;
+            }
+        } catch (error) {
+            console.warn("Database lookup failed:", error);
+            useOverpass = true;
+        }
 
-    const boundingBoxes = generateSpiralBoundingBoxes(
-      FinitialBox.minLat,
-      FinitialBox.minLon,
-      FinitialBox.maxLat,
-      FinitialBox.maxLon,
-      countX,
-      countY
-    );
+        // 🆕 If no database match, manually align to grid
+        if (!FinitialBox) {
+            const boxSize = 0.0026;
 
-    let countdown = boundingBoxes.length;
+            // Snap to grid using same logic as dataFetch.js
+            // Round to nearest grid point
+            const gridLat = Math.round(lat / boxSize) * boxSize;
+            const gridLon = Math.round(lon / boxSize) * boxSize;
 
-    const data = await loadtheMap(boundingBoxes);
+            FinitialBox = {
+                minLat: parseFloat(gridLat.toFixed(6)),
+                minLon: parseFloat(gridLon.toFixed(6)),
+                maxLat: parseFloat((gridLat + boxSize).toFixed(6)),
+                maxLon: parseFloat((gridLon + boxSize).toFixed(6))
+            };
 
-    for (const box of boundingBoxes) {
-      // Find the corresponding landuseType from the data based on matching IDs
-      const matchingBox = data.find((item) => item.id === box.id);
+            console.log("📍 Aligned to grid:", FinitialBox.minLat, FinitialBox.minLon);
+        }
 
-      if (matchingBox) {
-        const tileType = matchingBox.landuseType;
-        // console.log(matchingBox);
-        console.log("herewego");
-        console.log(matchingBox.landUseData);
-
-        // // Already parsed on server, no need for JSON.parse here
-        const tileKey = Object.keys(matchingBox.landUseData)[0];
-        const tileData = matchingBox.landUseData[tileKey];
-        landUseInfo.set(tileKey, tileData);
-
-        yield { tileType, box }; // Yield both the tileType and the corresponding box
-      } else {
-        // If there's no matching box, you can choose to handle it here
-        console.warn(
-          `No matching land use type found for box with ID: ${box.id}`
+        // Generate bounding boxes (now always has FinitialBox)
+        const boundingBoxes = generateSpiralBoundingBoxes(
+            FinitialBox.minLat,
+            FinitialBox.minLon,
+            FinitialBox.maxLat,
+            FinitialBox.maxLon,
+            countX,
+            countY
         );
-      }
 
-      // Introduce a delay of 0.25 seconds before yielding the next value
-      await new Promise((resolve) => setTimeout(resolve, 0));
+        console.log(`Generated ${boundingBoxes.length} bounding boxes`);
+
+        // Step 2: Try to load from database ONLY if we found a database match
+        let data = null;
+
+        if (!useOverpass) {
+            try {
+                data = await loadtheMap(boundingBoxes);
+
+                if (!data || data.length === 0) {
+                    console.warn("Database returned no data - falling back to Overpass");
+                    useOverpass = true;
+                } else {
+                    console.log(`✅ Loaded ${data.length} tiles from database`);
+                }
+            } catch (error) {
+                console.error("Database load failed:", error);
+                console.log("Falling back to Overpass API");
+                useOverpass = true;
+            }
+        } else {
+            console.log("🌍 Using Overpass API for this location");
+        }
+
+        // Yield metadata
+        yield {
+            mode: useOverpass ? 'overpass' : 'database',
+            totalTiles: boundingBoxes.length,
+            useOverpass: useOverpass
+        };
+
+        // Step 3: Process tiles
+        let processedCount = 0;
+        for (const box of boundingBoxes) {
+            let tileType, landUseData;
+
+            if (useOverpass) {
+                if (processedCount % 10 === 0) {
+                    console.log(`🌐 Fetching from Overpass: ${processedCount}/${boundingBoxes.length}`);
+                }
+
+                try {
+                    const [
+                        maxAreaType,
+                        prioritizedType,
+                        hasPowerPlant,
+                        hasHighway,
+                        landUses,
+                        serializedData,
+                    ] = await fetchLandUseInBoundingBox(
+                        box.minLat,
+                        box.minLon,
+                        box.maxLat,
+                        box.maxLon,
+                        box
+                    );
+
+                    if (hasHighway) {
+                        tileType = "road";
+                    } else if (maxAreaType) {
+                        tileType = maxAreaType;
+                    } else {
+                        tileType = "no data";
+                    }
+
+                    landUseData = JSON.parse(serializedData);
+
+                } catch (error) {
+                    console.error(`Overpass error for ${box.id}:`, error);
+                    tileType = "no data";
+                    landUseData = {};
+                }
+
+                // Rate limit: 1 request per second
+                await new Promise((resolve) => setTimeout(resolve, 3000));
+
+            } else {
+                // Use pre-loaded database data
+                const matchingBox = data.find((item) => item.id === box.id);
+
+                if (matchingBox) {
+                    tileType = matchingBox.landuseType;
+                    landUseData = matchingBox.landUseData;
+                } else {
+                    console.warn(`No matching data for box: ${box.id}`);
+                    tileType = "no data";
+                    landUseData = {};
+                }
+            }
+
+            const tileKey = Object.keys(landUseData)[0];
+            if (tileKey && landUseData[tileKey]) {
+                landUseInfo.set(tileKey, landUseData[tileKey]);
+            }
+
+            yield { tileType, box };
+
+            processedCount++;
+
+            if (!useOverpass) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+        }
+
+        console.log(`✅ Finished processing ${processedCount} tiles`);
+
+    } catch (error) {
+        console.error("❌ Error in processBoundingBoxes:", error);
     }
-  } catch (error) {
-    console.error(" Error fetching bounding boxes:", error);
-  }
 }

@@ -1,5 +1,5 @@
-export class CitySimulation {
-  constructor(scene) {
+﻿export class CitySimulation {
+  constructor(scene, gWidth) {
     this.scene = scene;
 
     // tracking the month ,, maybe dates later?
@@ -7,7 +7,7 @@ export class CitySimulation {
 
     // ccurrentenvironmental state
     this.pollution = 0;     //cuurent poluuton
-    this.temperature = 15;  // °C baseline
+    this.temperature = 15;  // °C baseline (idk how F works)
 
     // power state
     this.powerSupply  = 0;
@@ -17,10 +17,11 @@ export class CitySimulation {
     this.brownoutLevel= 0;       // 0-1 how dark city is
 
     // UI label
-    this.ui = scene.add.text(30, 572, '', {
-      color: '#ff6633',
-    }).setShadow(1, 1, '#ff9933', 3, false, true);
-    scene.cameras.main.ignore(this.ui);
+    const xPos = gWidth ? gWidth - 600 : 30;
+    //this.ui = scene.add.text(xPos, 572, '', {
+    //  color: '#ff6633',
+    //}).setShadow(1, 1, '#ff9933', 3, false, true);
+    //scene.cameras.main.ignore(this.ui);
 
     // monthly tick  every 10s
     scene.time.addEvent({
@@ -88,7 +89,7 @@ export class CitySimulation {
     this.applyBrownoutTint(this.brownoutLevel);
 
     // update UI
-    this.ui.text = `Month: ${this.month}  Temp: ${this.temperature.toFixed(1)}°C  Pollution: ${this.pollution.toFixed(0)}  Power: ${this.powerSupply}/${this.powerDemand}`;
+    //this.ui.text = `Month: ${this.month}  Temp: ${this.temperature.toFixed(1)}°C  Pollution: ${this.pollution.toFixed(0)}  Power: ${this.powerSupply}/${this.powerDemand}`;
   }
 
   // Categorise tiles each tick

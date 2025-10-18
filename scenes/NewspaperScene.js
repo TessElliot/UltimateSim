@@ -1,4 +1,4 @@
-export default class NewspaperScene extends Phaser.Scene {
+﻿export default class NewspaperScene extends Phaser.Scene {
   constructor () {
     super('newspaper');
   }

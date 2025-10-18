@@ -1,4 +1,4 @@
-export function preloadAssets(scene) {
+﻿export function preloadAssets(scene) {
   scene.load.image("background_image", "assets/background_title.png");
   scene.load.image("UI_bkgd", "assets/UI_bkgd.png");
   scene.load.image("button", "assets/buttons/button.png");
@@ -79,6 +79,10 @@ export function preloadAssets(scene) {
     frameHeight: 64,
   });
   scene.load.spritesheet("university", "assets/all/university.png", {
+    frameWidth: 32,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet("college", "assets/all/university.png", {
     frameWidth: 32,
     frameHeight: 128,
   });
@@ -335,7 +339,7 @@ export function preloadAssets(scene) {
     frameWidth: 32,
     frameHeight: 64,
   });
-  scene.load.spritesheet("coastline", "assets/coastline.png", {
+  scene.load.spritesheet("coastline", "assets/all/water_anim.png", {
     frameWidth: 32,
     frameHeight: 64,
   });
@@ -351,7 +355,15 @@ export function preloadAssets(scene) {
     frameWidth: 32,
     frameHeight: 128,
   });
-  scene.load.spritesheet("power:plant (oil;gas)", "assets/all/oil.png", {
+  scene.load.spritesheet("power:plant (oil)", "assets/all/power_plant_oil.png", {
+    frameWidth: 32,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet("power:plant (oil;gas)", "assets/all/power_plant_oil_gas.png", {
+    frameWidth: 32,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet("power:plant (gas)", "assets/all/power_plant_oil_gas.png", {
     frameWidth: 32,
     frameHeight: 128,
   });
@@ -391,15 +403,78 @@ export function preloadAssets(scene) {
     frameWidth: 32,
     frameHeight: 128,
   });
-  scene.load.spritesheet("tornado", "assets/all/tornado_strip.png", {
-    frameWidth: 48,
-    frameHeight: 48,
+  scene.load.spritesheet("garage", "assets/all/garage.png", {
+    frameWidth: 32,
+    frameHeight: 128,
   });
+  scene.load.spritesheet("cabin", "assets/all/cabin.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("civic", "assets/all/civic.png", {
+    frameWidth: 32,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet("mall", "assets/all/mall.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("greenfield", "assets/all/greenfield.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("schoolyard", "assets/all/schoolyard.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("waterpark", "assets/all/waterpark.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("basin", "assets/all/basin.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("harbor", "assets/all/harbor.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("marina", "assets/all/marina.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("railway", "assets/railway.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("aerodrome", "assets/all/hangar.png", {
+    frameWidth: 32,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet("apron", "assets/all/apron.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("terrace", "assets/all/terrace.png", {
+    frameWidth: 32,
+    frameHeight: 128,
+  });
+  scene.load.spritesheet("track", "assets/all/track.png", {
+    frameWidth: 32,
+    frameHeight: 128,
+  });
+
+
 
   scene.load.image("skyscraper", "assets/building.png");
   scene.load.image("solar", "assets/solar.png");
   scene.load.image("hydrogen", "assets/hydrogen.png");
   scene.load.image("paper_bg", "assets/paper_bg.png");
+
+  scene.load.spritesheet("tornado", "assets/all/tornado_strip.png", {
+    frameWidth: 48,
+    frameHeight: 48,
+  });
 
   // Add the listener to handle the 'complete' event
   scene.load.once("complete", () => {
@@ -534,11 +609,49 @@ export function createAnimations(scene) {
       frameRate: 1,
     },
     {
-      key: "power:plant (oil;gas)",
-      sprite: "power:plant (oil;gas)",
+      key: "power:plant (oil)",
+      sprite: "power:plant (oil)",
       frames: [0, 1, 2, 3],
       frameRate: 1,
     },
+    {
+      key: "dogpark",
+      sprite: "dogpark",
+      frames: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+      frameRate: 3,
+    },
+    {
+      key: "schoolyard",
+      sprite: "schoolyard",
+      frames: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+      frameRate: 3,
+    },
+    {
+      key: "waterpark",
+      sprite: "waterpark",
+      frames: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      frameRate: 3,
+    },
+    {
+      key: "harbor",
+      sprite: "harbor",
+      frames: [0, 1, 2, 3, 4, 5],
+      frameRate: 1,
+    },
+    {
+      key: "marina",
+      sprite: "marina",
+      frames: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      frameRate: 3,
+    },
+    {
+      key: "coastline",
+      sprite: "coastline",
+      frames: [0, 1, 2],
+      frameRate: 1,
+    },
+
+
     {
       key: "tornado_spin",
       sprite: "tornado",

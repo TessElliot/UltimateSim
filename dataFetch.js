@@ -2,13 +2,24 @@ import mysql from "mysql2/promise";
 import * as turf from "@turf/turf";
 
 import fetch from "node-fetch";
-require("dotenv").config(); // default
+// require("dotenv").config(); // default
 
 const landUseMap = new Map(); // Key: Tile ID or Coordinates, Value: landUses data
 let landUseInfo = new Map();
 const landUseTypesDict = {};
 // Class Node for A* Algorithm
 const tileTypesArray = [];
+// NEW – add near the other imports
+import { Pool } from "pg";
+const pgPool = new Pool({
+  host: "localhost",
+  port: 5432,
+  user: "postgres",
+  password: "Root12345@",
+  database: "Oklahoma", // <-- ✅ now using Oklahoma!
+});
+
+// Re-use one pool for the whole run
 
 async function fetchLocation() {
   try {
@@ -38,19 +49,19 @@ async function fetchAndStoreBoundingBoxes(initialBox, countX, countY) {
     countX,
     countY
   );
-  const db = await mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
-  });
   // const db = await mysql.createConnection({
-  //   host: "localhost",
-  //   user: "root", // MySQL username
-  //   password: "Root12345@", // MySQL password
-  //   database: "landuse",
+  //   host: process.env.DB_HOST,
+  //   user: process.env.DB_USER,
+  //   password: process.env.DB_PASSWORD,
+  //   database: process.env.DB_NAME,
+  //   port: process.env.DB_PORT,
   // });
+  const db = await mysql.createConnection({
+    host: "localhost",
+    user: "root", // MySQL username
+    password: "Root12345@", // MySQL password
+    database: "norman",
+  });
   //  Loop through bounding boxes
   for (const box of boundingBoxes) {
     try {
@@ -197,48 +208,91 @@ function generateSpiralBoundingBoxes(
 
   return boundingBoxes;
 }
+
 async function fetchLandUseInBoundingBox(minLat, minLon, maxLat, maxLon, box) {
-  const query = `
-   [out:json];
-   (
-     way["power"](${minLat},${minLon},${maxLat},${maxLon});
-     way["building"](${minLat},${minLon},${maxLat},${maxLon});
-     way["landuse"](${minLat},${minLon},${maxLat},${maxLon});
-     way["leisure"](${minLat},${minLon},${maxLat},${maxLon});
-     way["natural"](${minLat},${minLon},${maxLat},${maxLon});
-     way["place"](${minLat},${minLon},${maxLat},${maxLon});
-     way["highway"](${minLat},${minLon},${maxLat},${maxLon});
-     node["natural"](${minLat},${minLon},${maxLat},${maxLon});
-   );
-   out body geom;
-   >;
-   out skel qt;
-  `;
-
-  const url = "https://overpass-api.de/api/interpreter";
-
+  const client = await pgPool.connect();
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      body: `data=${encodeURIComponent(query)}`,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    });
+    const bbox4326 = [minLon, minLat, maxLon, maxLat];
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    /* ---------- Query polygons with FIXES ------------------------ */
+    const polySql = `
+      WITH
+        bbox_3857 AS (
+          SELECT ST_Transform(
+                   ST_MakeEnvelope($1,$2,$3,$4,4326), 3857) AS geom
+        ),
+        cand AS (
+          SELECT
+            /* exact Overpass priority, but first matching only */
+            CASE
+              WHEN COALESCE(power, (tags->'power')::text) = 'plant'
+                THEN 'power:plant'
+  
+              WHEN COALESCE(building, (tags->'building')::text) IS NOT NULL
+               AND COALESCE(building, (tags->'building')::text) <> 'yes'
+                THEN COALESCE(building, (tags->'building')::text)
+  
+              WHEN COALESCE(landuse, (tags->'landuse')::text) IS NOT NULL
+               AND COALESCE(landuse, (tags->'landuse')::text) <> 'yes'
+                THEN COALESCE(landuse, (tags->'landuse')::text)
+  
+              WHEN COALESCE(leisure, (tags->'leisure')::text) IS NOT NULL
+               AND COALESCE(leisure, (tags->'leisure')::text) <> 'yes'
+                THEN COALESCE(leisure, (tags->'leisure')::text)
+  
+              WHEN COALESCE("natural", (tags->'natural')::text) IS NOT NULL
+               AND COALESCE("natural", (tags->'natural')::text) <> 'yes'
+                THEN COALESCE("natural", (tags->'natural')::text)
+  
+              -- REMOVE PLACE! Do NOT allow place to dominate.
+              -- WHEN COALESCE(place, (tags->'place')::text) IS NOT NULL
+              --  AND COALESCE(place, (tags->'place')::text) <> 'yes'
+              --   THEN COALESCE(place, (tags->'place')::text)
+  
+            END AS type,
+  
+            /* clip to tile and fix invalid geometry */
+            ST_Intersection(ST_MakeValid(way), bbox_3857.geom) AS geom,
+            tags::jsonb AS tags
+          FROM planet_osm_polygon, bbox_3857
+          WHERE way && bbox_3857.geom
+            AND (
+                 COALESCE(power, (tags->'power')::text) = 'plant'
+              OR COALESCE(building, (tags->'building')::text) IS NOT NULL
+              OR COALESCE(landuse , (tags->'landuse' )::text) IS NOT NULL
+              OR COALESCE(leisure , (tags->'leisure' )::text) IS NOT NULL
+              OR COALESCE("natural", (tags->'natural')::text) IS NOT NULL
+              -- OR COALESCE(place   , (tags->'place'   )::text) IS NOT NULL -- REMOVE place
+            )
+        )
+      SELECT
+        type,
+        ST_Area(ST_Transform(geom,3857)) AS area,
+        tags
+      FROM cand
+      WHERE type IS NOT NULL
+        AND NOT ST_IsEmpty(geom);
+      `;
 
-    const data = await response.json();
+    const { rows: polyRows } = await client.query(polySql, bbox4326);
+
+    /* ----------  motorway / trunk check  --------- */
+    const highwaySql = `
+WITH bbox_3857 AS (
+  SELECT ST_Transform(
+           ST_MakeEnvelope($1,$2,$3,$4,4326), 3857) AS geom
+)
+SELECT 1
+FROM planet_osm_line, bbox_3857
+WHERE highway IN ('motorway','trunk')
+  AND ST_Intersects(way, bbox_3857.geom)
+LIMIT 1;
+`;
+    const { rowCount: highCnt } = await client.query(highwaySql, bbox4326);
+    const hasHighway = highCnt > 0;
+
+    /* ---------- Accumulate areas -------------------------------- */
     const landUses = {};
-    const invalidPolygons = [];
-    let prioritizedType = null;
-    let hasPowerPlant = false;
-    let hasHighway = false;
-    let powerPlantType = null;
-
-    // ✅ Use absolute coordinate key instead of x_y
     const tileKey = `${box.minLat.toFixed(6)}_${box.minLon.toFixed(6)}`;
 
     if (!landUseInfo.has(tileKey)) {
@@ -247,175 +301,271 @@ async function fetchLandUseInBoundingBox(minLat, minLon, maxLat, maxLon, box) {
         lon: box.minLon,
         tags: {},
         landUses: {},
-      });
-
-      landUseTypesDict[tileKey] = {
-        lat: box.minLat,
-        lon: box.minLon,
-        tags: {},
-        landUses: {},
         maxAreaType: null,
-      };
-    }
-
-    if (data.elements) {
-      data.elements.forEach((element) => {
-        let type = null;
-
-        if (element.tags) {
-          Object.assign(landUseInfo.get(tileKey).tags, element.tags);
-          Object.assign(landUseTypesDict[tileKey].tags, element.tags);
-
-          if (element.tags.natural === "water") {
-            console.log("Water detected:", element.tags.water || "unspecified");
-          }
-          if (element.tags.natural === "wood") {
-            console.log(
-              "Wood detected:",
-              element.tags.description || "unspecified"
-            );
-          }
-          if (element.tags.pitch) {
-            console.log("Pitch detected:", element.tags.sport || "unspecified");
-          }
-          if (element.tags.industrial) {
-            console.log(
-              "Industrial:",
-              element.tags.industrial || "unspecified"
-            );
-          }
-          if (element.tags.building === "yes" && element.tags.man_made) {
-            console.log("Building w/ man-made:", element.tags.man_made);
-          }
-          if (element.tags.roof && element.tags.amenity) {
-            console.log("Roof w/ amenity:", element.tags.amenity);
-          }
-          if (element.tags.building && element.tags.amenity) {
-            console.log("Building w/ amenity:", element.tags.amenity);
-          }
-          if (element.tags.building && element.tags.shop) {
-            console.log("Building w/ shop:", element.tags.shop);
-          }
-          if (element.tags.bicycle) {
-            console.log("Bicycle element:", element.tags.bicycle);
-          }
-          if (element.tags.aeroway) {
-            console.log("Aeroway:", element.tags.aeroway);
-          }
-
-          // Priority tags
-          if (["motorway", "trunk"].includes(element.tags.highway)) {
-            hasHighway = true;
-            type = "national_highway";
-            prioritizedType = type;
-          } else if (element.tags.power === "plant") {
-            hasPowerPlant = true;
-            powerPlantType = element.tags["plant:source"] || "unknown";
-            prioritizedType = `power:plant (${powerPlantType})`;
-          } else if (
-            (element.tags.building && element.tags.building !== "yes") ||
-            (element.tags.landuse && element.tags.landuse !== "yes") ||
-            (element.tags.leisure && element.tags.leisure !== "yes") ||
-            (element.tags.natural && element.tags.natural !== "yes") ||
-            (element.tags.place && element.tags.place !== "yes")
-          ) {
-            type =
-              element.tags.building ||
-              element.tags.landuse ||
-              element.tags.leisure ||
-              element.tags.natural ||
-              element.tags.place;
-          }
-        }
-
-        if (type && element.geometry?.length > 0) {
-          const coordinates = element.geometry.map((point) => [
-            point.lon,
-            point.lat,
-          ]);
-
-          if (
-            coordinates.length >= 4 &&
-            coordinates[0][0] === coordinates[coordinates.length - 1][0] &&
-            coordinates[0][1] === coordinates[coordinates.length - 1][1]
-          ) {
-            const polygon = turf.polygon([coordinates]);
-            const area = turf.area(polygon);
-
-            if (!landUses[type]) {
-              landUses[type] = 0;
-            }
-            landUses[type] += area;
-          } else {
-            invalidPolygons.push({ type, geometry: coordinates });
-          }
-        }
       });
     }
 
-    let sortedLandUses = Object.entries(landUses).sort((a, b) => b[1] - a[1]);
+    let hasPowerPlant = false;
+    let powerPlantType = null;
 
-    let maxAreaType = null;
+    for (const { type, area, tags } of polyRows) {
+      if (!type) continue;
 
-    if (sortedLandUses.length > 0) {
-      maxAreaType = sortedLandUses[0][0];
-      if (maxAreaType === "yes" && sortedLandUses.length > 1) {
-        maxAreaType = sortedLandUses[1][0];
+      Object.assign(landUseInfo.get(tileKey).tags, tags);
+
+      if (type === "power:plant") {
+        hasPowerPlant = true;
+        powerPlantType = tags["plant:source"] || "unknown";
       }
+
+      landUses[type] = (landUses[type] || 0) + area;
     }
 
-    if (hasHighway) {
-      maxAreaType = "national_highway";
-    } else if (hasPowerPlant) {
-      maxAreaType = `power:plant (${powerPlantType})`;
-    }
+    /* ---------- Pick dominant land-use -------------------------- */
+    const sorted = Object.entries(landUses).sort((a, b) => b[1] - a[1]);
+    let maxAreaType = sorted.length ? sorted[0][0] : null;
+    if (maxAreaType === "yes" && sorted.length > 1) maxAreaType = sorted[1][0];
 
-    // Save final results
-    const tileData = landUseInfo.get(tileKey);
-    tileData.landUses = { ...landUses };
-    tileData.maxAreaType = maxAreaType;
+    /* ---------- Apply highway / power overrides ----------------- */
+    if (hasHighway) maxAreaType = "national_highway";
+    else if (hasPowerPlant) maxAreaType = `power:plant (${powerPlantType})`;
 
-    // Serialize
-    const convertMapToObject = (map) => {
-      const obj = {};
-      map.forEach((value, key) => {
-        obj[key] = value;
-      });
-      return obj;
-    };
+    /* ---------- Save -------------------------------------------- */
+    landUseInfo.get(tileKey).landUses = { ...landUses };
+    landUseInfo.get(tileKey).maxAreaType = maxAreaType;
 
-    const serializedLandUseInfo = JSON.stringify(
-      convertMapToObject(new Map([[tileKey, tileData]]))
-    );
-
+    const serialized = JSON.stringify({ [tileKey]: landUseInfo.get(tileKey) });
     landUseInfo.clear();
 
-    console.log("Serialized Land Use Info:", serializedLandUseInfo);
-
-    return [
-      maxAreaType,
-      prioritizedType || null,
-      hasPowerPlant,
-      hasHighway,
-      landUses,
-      serializedLandUseInfo,
-    ];
-  } catch (error) {
-    console.error("Error fetching land use data:", error);
+    return [maxAreaType, null, hasPowerPlant, hasHighway, landUses, serialized];
+  } catch (err) {
+    console.error("PostGIS query failed:", err);
     return [null, null, false, false, {}, "{}"];
+  } finally {
+    client.release();
   }
 }
+
+// async function fetchLandUseInBoundingBox(minLat, minLon, maxLat, maxLon, box) {
+//   const query = `
+//    [out:json];
+//    (
+//      way["power"](${minLat},${minLon},${maxLat},${maxLon});
+//      way["building"](${minLat},${minLon},${maxLat},${maxLon});
+//      way["landuse"](${minLat},${minLon},${maxLat},${maxLon});
+//      way["leisure"](${minLat},${minLon},${maxLat},${maxLon});
+//      way["natural"](${minLat},${minLon},${maxLat},${maxLon});
+//      way["place"](${minLat},${minLon},${maxLat},${maxLon});
+//      way["highway"](${minLat},${minLon},${maxLat},${maxLon});
+//      node["natural"](${minLat},${minLon},${maxLat},${maxLon});
+//    );
+//    out body geom;
+//    >;
+//    out skel qt;
+//   `;
+
+//   const url = "https://overpass-api.de/api/interpreter";
+
+//   try {
+//     const response = await fetch(url, {
+//       method: "POST",
+//       body: `data=${encodeURIComponent(query)}`,
+//       headers: {
+//         "Content-Type": "application/x-www-form-urlencoded",
+//       },
+//     });
+
+//     if (!response.ok) {
+//       throw new Error(`HTTP error! status: ${response.status}`);
+//     }
+
+//     const data = await response.json();
+//     const landUses = {};
+//     const invalidPolygons = [];
+//     let prioritizedType = null;
+//     let hasPowerPlant = false;
+//     let hasHighway = false;
+//     let powerPlantType = null;
+
+//     // ✅ Use absolute coordinate key instead of x_y
+//     const tileKey = `${box.minLat.toFixed(6)}_${box.minLon.toFixed(6)}`;
+
+//     if (!landUseInfo.has(tileKey)) {
+//       landUseInfo.set(tileKey, {
+//         lat: box.minLat,
+//         lon: box.minLon,
+//         tags: {},
+//         landUses: {},
+//       });
+
+//       landUseTypesDict[tileKey] = {
+//         lat: box.minLat,
+//         lon: box.minLon,
+//         tags: {},
+//         landUses: {},
+//         maxAreaType: null,
+//       };
+//     }
+
+//     if (data.elements) {
+//       data.elements.forEach((element) => {
+//         let type = null;
+
+//         if (element.tags) {
+//           Object.assign(landUseInfo.get(tileKey).tags, element.tags);
+//           Object.assign(landUseTypesDict[tileKey].tags, element.tags);
+
+//           if (element.tags.natural === "water") {
+//             console.log("Water detected:", element.tags.water || "unspecified");
+//           }
+//           if (element.tags.natural === "wood") {
+//             console.log(
+//               "Wood detected:",
+//               element.tags.description || "unspecified"
+//             );
+//           }
+//           if (element.tags.pitch) {
+//             console.log("Pitch detected:", element.tags.sport || "unspecified");
+//           }
+//           if (element.tags.industrial) {
+//             console.log(
+//               "Industrial:",
+//               element.tags.industrial || "unspecified"
+//             );
+//           }
+//           if (element.tags.building === "yes" && element.tags.man_made) {
+//             console.log("Building w/ man-made:", element.tags.man_made);
+//           }
+//           if (element.tags.roof && element.tags.amenity) {
+//             console.log("Roof w/ amenity:", element.tags.amenity);
+//           }
+//           if (element.tags.building && element.tags.amenity) {
+//             console.log("Building w/ amenity:", element.tags.amenity);
+//           }
+//           if (element.tags.building && element.tags.shop) {
+//             console.log("Building w/ shop:", element.tags.shop);
+//           }
+//           if (element.tags.bicycle) {
+//             console.log("Bicycle element:", element.tags.bicycle);
+//           }
+//           if (element.tags.aeroway) {
+//             console.log("Aeroway:", element.tags.aeroway);
+//           }
+
+//           // Priority tags
+//           if (["motorway", "trunk"].includes(element.tags.highway)) {
+//             hasHighway = true;
+//             type = "national_highway";
+//             prioritizedType = type;
+//           } else if (element.tags.power === "plant") {
+//             hasPowerPlant = true;
+//             powerPlantType = element.tags["plant:source"] || "unknown";
+//             prioritizedType = `power:plant (${powerPlantType})`;
+//           } else if (
+//             (element.tags.building && element.tags.building !== "yes") ||
+//             (element.tags.landuse && element.tags.landuse !== "yes") ||
+//             (element.tags.leisure && element.tags.leisure !== "yes") ||
+//             (element.tags.natural && element.tags.natural !== "yes") ||
+//             (element.tags.place && element.tags.place !== "yes")
+//           ) {
+//             type =
+//               element.tags.building ||
+//               element.tags.landuse ||
+//               element.tags.leisure ||
+//               element.tags.natural ||
+//               element.tags.place;
+//           }
+//         }
+
+//         if (type && element.geometry?.length > 0) {
+//           const coordinates = element.geometry.map((point) => [
+//             point.lon,
+//             point.lat,
+//           ]);
+
+//           if (
+//             coordinates.length >= 4 &&
+//             coordinates[0][0] === coordinates[coordinates.length - 1][0] &&
+//             coordinates[0][1] === coordinates[coordinates.length - 1][1]
+//           ) {
+//             const polygon = turf.polygon([coordinates]);
+//             const area = turf.area(polygon);
+
+//             if (!landUses[type]) {
+//               landUses[type] = 0;
+//             }
+//             landUses[type] += area;
+//           } else {
+//             invalidPolygons.push({ type, geometry: coordinates });
+//           }
+//         }
+//       });
+//     }
+
+//     let sortedLandUses = Object.entries(landUses).sort((a, b) => b[1] - a[1]);
+
+//     let maxAreaType = null;
+
+//     if (sortedLandUses.length > 0) {
+//       maxAreaType = sortedLandUses[0][0];
+//       if (maxAreaType === "yes" && sortedLandUses.length > 1) {
+//         maxAreaType = sortedLandUses[1][0];
+//       }
+//     }
+
+//     if (hasHighway) {
+//       maxAreaType = "national_highway";
+//     } else if (hasPowerPlant) {
+//       maxAreaType = `power:plant (${powerPlantType})`;
+//     }
+
+//     // Save final results
+//     const tileData = landUseInfo.get(tileKey);
+//     tileData.landUses = { ...landUses };
+//     tileData.maxAreaType = maxAreaType;
+
+//     // Serialize
+//     const convertMapToObject = (map) => {
+//       const obj = {};
+//       map.forEach((value, key) => {
+//         obj[key] = value;
+//       });
+//       return obj;
+//     };
+
+//     const serializedLandUseInfo = JSON.stringify(
+//       convertMapToObject(new Map([[tileKey, tileData]]))
+//     );
+
+//     landUseInfo.clear();
+
+//     console.log("Serialized Land Use Info:", serializedLandUseInfo);
+
+//     return [
+//       maxAreaType,
+//       prioritizedType || null,
+//       hasPowerPlant,
+//       hasHighway,
+//       landUses,
+//       serializedLandUseInfo,
+//     ];
+//   } catch (error) {
+//     console.error("Error fetching land use data:", error);
+//     return [null, null, false, false, {}, "{}"];
+//   }
+// }
 
 (async () => {
   // const locationData = await fetchLocation();
   // const minLat = parseFloat(locationData.minLat);
   // const minLon = parseFloat(locationData.minLon);
 
-  // const minLat = 42.684111;
-  // const minLon = -73.826125;
-  const minLat = 25.780249;
+  const minLat = 35.4676;
+  const minLon = -97.5164;
 
-  const minLon = -79.299656;
+  // const minLat = 25.780249;
+
+  // const minLon = -79.299656;
 
   const boxSize = 0.0026;
   const initialBox = {
@@ -424,8 +574,10 @@ async function fetchLandUseInBoundingBox(minLat, minLon, maxLat, maxLon, box) {
     maxLat: minLat + boxSize,
     maxLon: minLon + boxSize,
   };
-  const gridWidth = 100,
-    gridHeight = 100;
+  // const gridWidth = 3100,
+  //   gridHeight = 1800;
+  const gridWidth = 3308;
+  const gridHeight = 1308;
 
   await fetchAndStoreBoundingBoxes(initialBox, gridWidth, gridHeight);
 })();

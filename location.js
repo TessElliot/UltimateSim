@@ -1,4 +1,4 @@
-let locationData = {
+﻿let locationData = {
   lat: 0,
   lon: 0,
 };

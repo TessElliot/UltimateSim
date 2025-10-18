@@ -1,6 +1,7 @@
-export function findClimateNumber(key) {
+﻿export function findClimateNumber(key) {
   const climateScores = {
     "power:plant (fossil_fuel)": -10,
+    "power:plant (oil)": -10,
     "power:plant (oil;gas)": -10,
     industrial: -5,
     highway: -6,
@@ -37,6 +38,7 @@ export function findClimateNumber(key) {
     farmyard: -2,
     water: 0,
     military: -2,
+    apartments: -2,
   };
 
   return climateScores[key] ?? 0;
@@ -174,8 +176,8 @@ export function findClimateNumber(key) {
 //     const tile = scene.mapTiles.find((t) => t.gridX === x && t.gridY === y);
 //     if (!tile || tile.texture.key !== "no data") continue;
 
-//     tile.setTexture("water");
-//     tile.play({ key: "water", randomFrame: true });
+//     tile.setTexture("coastline");
+//     tile.play({ key: "coastline", randomFrame: true });
 //     visited.add(key);
 
 //     const beachOffsets = [
@@ -242,7 +244,7 @@ export function applyWaterOnDominantNoDataSide(
 
   for (const tile of tileArray) {
     if (
-      (tile.texture.key === "beach" || tile.texture.key === "coastline") &&
+      (tile.texture.key === "beach" || tile.texture.key === "coastline" || tile.texture.key === "road") &&
       !visited.has(`${tile.gridX},${tile.gridY}`)
     ) {
       const cluster = getConnectedRoadCluster(tile, tileArray, visited);
@@ -293,7 +295,7 @@ export function getConnectedRoadCluster(
     const neighbors = tileArray.filter(
       (t) =>
         Math.abs(t.gridX - tile.gridX) + Math.abs(t.gridY - tile.gridY) === 1 &&
-        (t.texture.key === "beach" || t.texture.key === "coastline")
+            (t.texture.key === "beach" || t.texture.key === "coastline" || t.texture.key === "road" )
     );
 
     neighbors.forEach((n) => {
@@ -370,7 +372,7 @@ function fillSideWithWater(scene, tileArray, cluster, orientation, side) {
     const tile = tileArray.find((t) => t.gridX === x && t.gridY === y);
     if (!tile || tile.texture.key !== "no data") continue;
 
-    tile.texture.key = "water";
+    tile.texture.key = "coastline";
     visited.add(key);
 
     const beachOffsets = [
@@ -431,7 +433,7 @@ export function fixBeachTileFrames(scene) {
         (t) => t.gridX === tile.gridX + dx && t.gridY === tile.gridY + dy
       );
 
-      if (neighbor?.texture?.key === "water") {
+      if (neighbor?.texture?.key === "coastline") {
         const frame = side === "top" || side === "left" ? 0 : 1;
         tile.setTexture("beach", frame);
         break;
