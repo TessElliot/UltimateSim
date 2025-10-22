@@ -183,6 +183,11 @@ async function fetchLocationUsingApi(lat, lon) {
         const response = await fetch(
             `${backendBaseUrl}/closestBbox?lat=${lat}&lon=${lon}`
         );
+
+        if (!response.ok) {
+            return null;
+        }
+
         const boundingBoxData = await response.json();
 
         if (!boundingBoxData || boundingBoxData.length === 0) {
@@ -386,6 +391,9 @@ export async function* processBoundingBoxes(initialBox, countX, countY) {
             if (tileKey && landUseData[tileKey]) {
                 landUseInfo.set(tileKey, landUseData[tileKey]);
             }
+
+            // 🔍 LOG EVERY TILE THAT STREAMS IN
+            console.log(`🌍 Streaming tile ${processedCount + 1}: type="${tileType}", box.id="${box.id}", coords=(${box.x},${box.y})`);
 
             yield { tileType, box };
 

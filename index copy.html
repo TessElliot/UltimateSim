@@ -1,0 +1,321 @@
+﻿
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="robots" content="noindex, nofollow, noicon">
+    <title>Ultimate Sim</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+    <!-- Include libraries and other scripts -->
+    <script src="lib/phaser.min.js" type="text/javascript"></script>
+    <script src="utils/EventDispatcher.js" type="text/javascript"></script>
+    <script src="utils/UIBlock.js" type="text/javascript"></script>
+    <script src="utils/DropdownMenu.js" type="text/javascript"></script>
+    <script src="utils/HTMLControls.js" type="text/javascript"></script>
+    <script src="utils/BorderAnimation.js" type="text/javascript"></script>
+    <script src="utils/TitleUI.js" type="text/javascript"></script>
+    <script src="./scenes/TitleScene.js?v=8800002" type="module"></script>
+
+    <script type="module" src="./scenes/GameScene.js?v=8800033"></script>
+    <script src="scenes/UIScene.js" type="text/javascript"></script>
+    <script type="module" src="services/os.js?v=8800001"></script>
+
+    <script type="module" src="./main.js?v=9999"></script>
+    <script type="module" src="./scenes/DataScene.js"></script>
+    <script type="module" src="services/location.js"></script>
+
+    <!-- Include Turf.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+
+    <!-- External CSS -->
+    <link rel="stylesheet" href="styles.css?v=8800006">
+</head>
+<body>
+    <div id="outer" width="100wh" height'="100wv">
+        <!-- Sky Gradient Overlay -->
+        <div id="sky-overlay"></div>
+
+        <!-- Blue Gradient Overlay -->
+        <div id="gradient-overlay"></div>
+
+        <!-- Top Black Spacer -->
+        <div id="top-spacer"></div>
+
+        <!-- Game Container -->
+        <div id="container" width="1000" height="600">
+            <!-- Title Screen UI Overlay -->
+            <div id="title-ui">
+                <!-- Game Title -->
+                <div id="game-title">
+                    <span>U</span><span>L</span><span>T</span><span>I</span><span>M</span><span>A</span><span>T</span><span>E</span><span> </span><span>S</span><span>I</span><span>M</span>
+                </div>
+
+                <!-- Enter Text -->
+                <div id="enter-text">enter the game</div>
+
+                <!-- Invisible spacer -->
+                <br style="opacity: 0; pointer-events: none;">
+
+                <button class="title-button" id="start-game-btn">Start</button>
+                <button class="title-button" id="resume-game-btn">Resume Game</button>
+                <button class="title-button" id="credits-btn">Credits</button>
+
+                <!-- Location buttons (shown after Start is clicked) -->
+                <button class="title-button" id="current-location-btn" style="display: none;">Current Location</button>
+                <button class="title-button" id="manual-location-btn" style="display: none;">Manual Location</button>
+
+                <!-- Credits Display (appears below buttons) -->
+                <div id="title-credits-display">
+                    <p>
+                        Fuller Games, 2025<br /><br />
+                        <u>Programming</u><br />Tess Elliot<br />Sagar Singh<br /><br />
+                        <u>Graphics</u><br />Leilani Armstrong<br />Brian Bortz<br />Tess Elliot<br />Sara Mohajer<br />Saray Suarez<br />Jewell Watters<br />Skylar Wright<br /><br />
+                        <u>Climate Advisors</u><br />Gabrielle R. Brown<br />Renee McPherson<br /><br />
+                        <u>˙⋆Thanks to⋆˙</u><br />Rhizome, Inc<br />Arts and Humanities Forum<br />University of Oklahoma
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SVG definitions for wave clip path -->
+        <svg width="0" height="0">
+            <defs>
+                <clipPath id="wave-clip" clipPathUnits="objectBoundingBox">
+                    <path id="wave-clip-path" d="
+                        M -0.1,0
+                        L 1.1,0
+                        L 1.1,0.93
+                        Q 1.075,0.90 1.05,0.93
+                        Q 1.025,0.96 1.0,0.93
+                        Q 0.975,0.90 0.95,0.93
+                        Q 0.925,0.96 0.9,0.93
+                        Q 0.875,0.90 0.85,0.93
+                        Q 0.825,0.96 0.8,0.93
+                        Q 0.775,0.90 0.75,0.93
+                        Q 0.725,0.96 0.7,0.93
+                        Q 0.675,0.90 0.65,0.93
+                        Q 0.625,0.96 0.6,0.93
+                        Q 0.575,0.90 0.55,0.93
+                        Q 0.525,0.96 0.5,0.93
+                        Q 0.475,0.90 0.45,0.93
+                        Q 0.425,0.96 0.4,0.93
+                        Q 0.375,0.90 0.35,0.93
+                        Q 0.325,0.96 0.3,0.93
+                        Q 0.275,0.90 0.25,0.93
+                        Q 0.225,0.96 0.2,0.93
+                        Q 0.175,0.90 0.15,0.93
+                        Q 0.125,0.96 0.1,0.93
+                        Q 0.075,0.90 0.05,0.93
+                        Q 0.025,0.96 0.0,0.93
+                        Q -0.025,0.90 -0.05,0.93
+                        Q -0.075,0.96 -0.1,0.93
+                        Z">
+                        <animateTransform
+                            attributeName="transform"
+                            attributeType="XML"
+                            type="translate"
+                            values="0 0; 0.1 0"
+                            keyTimes="0; 1"
+                            dur="2s"
+                            calcMode="linear"
+                            repeatCount="indefinite"/>
+                        <animate
+                            attributeName="d"
+                            values="
+                                M -0.1,0 L 1.1,0 L 1.1,0.93 Q 1.075,0.90 1.05,0.93 Q 1.025,0.96 1.0,0.93 Q 0.975,0.90 0.95,0.93 Q 0.925,0.96 0.9,0.93 Q 0.875,0.90 0.85,0.93 Q 0.825,0.96 0.8,0.93 Q 0.775,0.90 0.75,0.93 Q 0.725,0.96 0.7,0.93 Q 0.675,0.90 0.65,0.93 Q 0.625,0.96 0.6,0.93 Q 0.575,0.90 0.55,0.93 Q 0.525,0.96 0.5,0.93 Q 0.475,0.90 0.45,0.93 Q 0.425,0.96 0.4,0.93 Q 0.375,0.90 0.35,0.93 Q 0.325,0.96 0.3,0.93 Q 0.275,0.90 0.25,0.93 Q 0.225,0.96 0.2,0.93 Q 0.175,0.90 0.15,0.93 Q 0.125,0.96 0.1,0.93 Q 0.075,0.90 0.05,0.93 Q 0.025,0.96 0.0,0.93 Q -0.025,0.90 -0.05,0.93 Q -0.075,0.96 -0.1,0.93 Z;
+                                M -0.1,0 L 1.1,0 L 1.1,0.93 Q 1.075,0.915 1.05,0.93 Q 1.025,0.945 1.0,0.93 Q 0.975,0.915 0.95,0.93 Q 0.925,0.945 0.9,0.93 Q 0.875,0.915 0.85,0.93 Q 0.825,0.945 0.8,0.93 Q 0.775,0.915 0.75,0.93 Q 0.725,0.945 0.7,0.93 Q 0.675,0.915 0.65,0.93 Q 0.625,0.945 0.6,0.93 Q 0.575,0.915 0.55,0.93 Q 0.525,0.945 0.5,0.93 Q 0.475,0.915 0.45,0.93 Q 0.425,0.945 0.4,0.93 Q 0.375,0.915 0.35,0.93 Q 0.325,0.945 0.3,0.93 Q 0.275,0.915 0.25,0.93 Q 0.225,0.945 0.2,0.93 Q 0.175,0.915 0.15,0.93 Q 0.125,0.945 0.1,0.93 Q 0.075,0.915 0.05,0.93 Q 0.025,0.945 0.0,0.93 Q -0.025,0.915 -0.05,0.93 Q -0.075,0.945 -0.1,0.93 Z;
+                                M -0.1,0 L 1.1,0 L 1.1,0.93 Q 1.075,0.90 1.05,0.93 Q 1.025,0.96 1.0,0.93 Q 0.975,0.90 0.95,0.93 Q 0.925,0.96 0.9,0.93 Q 0.875,0.90 0.85,0.93 Q 0.825,0.96 0.8,0.93 Q 0.775,0.90 0.75,0.93 Q 0.725,0.96 0.7,0.93 Q 0.675,0.90 0.65,0.93 Q 0.625,0.96 0.6,0.93 Q 0.575,0.90 0.55,0.93 Q 0.525,0.96 0.5,0.93 Q 0.475,0.90 0.45,0.93 Q 0.425,0.96 0.4,0.93 Q 0.375,0.90 0.35,0.93 Q 0.325,0.96 0.3,0.93 Q 0.275,0.90 0.25,0.93 Q 0.225,0.96 0.2,0.93 Q 0.175,0.90 0.15,0.93 Q 0.125,0.96 0.1,0.93 Q 0.075,0.90 0.05,0.93 Q 0.025,0.96 0.0,0.93 Q -0.025,0.90 -0.05,0.93 Q -0.075,0.96 -0.1,0.93 Z"
+                            dur="4s"
+                            calcMode="linear"
+                            repeatCount="indefinite"/>
+                    </path>
+                </clipPath>
+            </defs>
+        </svg>
+
+        <!-- Land Use Info Display -->
+        <div id="land-use-info"></div>
+
+        <!-- Climate Score Display -->
+        <div id="climate-score">Total Regional Climate Impact: 0</div>
+
+        <!-- Navigation Bar -->
+        <div id="nav-bar">
+            <div id="game-menu">
+                <div class="menu-bar">
+                    <!-- Navigate Dropdown -->
+                    <div class="dropdown">
+                        <span class="dropdown-label">Navigate</span>
+                        <div class="dropdown-content">
+                            <div class="menu-item" data-action="move">Move</div>
+                            <div class="menu-item" data-action="zoom">Zoom</div>
+                            <div class="menu-item" data-action="rotate">Rotate</div>
+                            <div class="menu-item" data-action="home">Center</div>
+                            <div class="menu-item" data-action="info">Info</div>
+                        </div>
+                    </div>
+
+                    <!-- Build Dropdown -->
+                    <div class="dropdown">
+                        <span class="dropdown-label">Build</span>
+                        <div class="dropdown-content">
+                            <div class="menu-item" data-action="solar">Solar</div>
+                            <div class="menu-item" data-action="wind">Wind</div>
+                            <div class="menu-item" data-action="hydrogen">Hydrogen</div>
+                            <div class="menu-item" data-action="trees">Trees</div>
+                            <div class="menu-item" data-action="apartments">Apartments</div>
+                            <div class="menu-item" data-action="bike">Bike Lane</div>
+                            <div class="menu-item" data-action="road">Road</div>
+                        </div>
+                    </div>
+
+                    <!-- Tools Dropdown -->
+                    <div class="dropdown">
+                        <span class="dropdown-label">Tools</span>
+                        <div class="dropdown-content">
+                            <div class="menu-item" data-action="bulldoze">Bulldoze</div>
+                            <div class="menu-item" data-action="undo">Undo</div>
+                            <div class="menu-item" data-action="save">Save</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Initialize page load and show title buttons
+        window.addEventListener('load', () => {
+            // Change body background from light blue to black
+            document.body.classList.add('loaded');
+
+            // Show title buttons shortly after page load
+            setTimeout(() => {
+                window.showTitleButtons();
+            }, 200); // 0.2s after load
+        });
+
+        // Function to show title buttons with staggered animation
+        window.showTitleButtons = function() {
+            const startBtn = document.getElementById('start-game-btn');
+            const resumeBtn = document.getElementById('resume-game-btn');
+            const creditsBtn = document.getElementById('credits-btn');
+
+            if (startBtn) startBtn.classList.add('pop-in');
+            if (resumeBtn) resumeBtn.classList.add('pop-in');
+            if (creditsBtn) creditsBtn.classList.add('pop-in');
+        };
+
+        // Function to show title buttons immediately (no animation)
+        window.titleButtonsNow = function() {
+            const startBtn = document.getElementById('start-game-btn');
+            const resumeBtn = document.getElementById('resume-game-btn');
+            const creditsBtn = document.getElementById('credits-btn');
+
+            if (startBtn) {
+                startBtn.style.display = 'block';
+                startBtn.style.opacity = '1';
+            }
+            if (resumeBtn) {
+                resumeBtn.style.display = 'block';
+                resumeBtn.style.opacity = '1';
+            }
+            if (creditsBtn) {
+                creditsBtn.style.display = 'block';
+                creditsBtn.style.opacity = '1';
+            }
+        };
+
+        // Function to trigger curtain rise (called from TitleUI.js)
+        window.curtainClickCount = 0;
+        window.raiseCurtain = function() {
+            window.curtainClickCount++;
+            console.log('raiseCurtain called, click count:', window.curtainClickCount);
+
+            const gradientOverlay = document.getElementById('gradient-overlay');
+            const skyOverlay = document.getElementById('sky-overlay');
+            const topSpacer = document.getElementById('top-spacer');
+            const gameTitle = document.getElementById('game-title');
+            const enterText = document.getElementById('enter-text');
+
+            // If second click, immediately delete everything and show menu
+            if (window.curtainClickCount === 2) {
+                console.log('Second click detected - skipping animation and showing menu immediately');
+                if (gradientOverlay) gradientOverlay.remove();
+                if (skyOverlay) skyOverlay.remove();
+                if (gameTitle) gameTitle.remove();
+                if (enterText) enterText.remove();
+                // Show menu buttons immediately (no animation)
+                window.titleButtonsNow();
+                return;
+            }
+
+            if (gradientOverlay) {
+                // Add rising class to start animation
+                gradientOverlay.classList.add('rising');
+
+                // Also raise the sky overlay
+                if (skyOverlay) {
+                    skyOverlay.classList.add('rising');
+                }
+
+                // Turn top spacer black when curtain starts rising
+                if (topSpacer) {
+                    topSpacer.classList.add('black');
+                }
+
+                // Make title and enter text fade out with curtain
+                if (gameTitle) {
+                    gameTitle.classList.add('rising');
+                }
+                if (enterText) {
+                    enterText.classList.add('rising');
+                }
+
+                // Remove overlays after animation completes
+                setTimeout(() => {
+                    if (gradientOverlay) gradientOverlay.remove();
+                    if (skyOverlay) skyOverlay.remove();
+                    if (gameTitle) gameTitle.remove();
+                    if (enterText) enterText.remove();
+                }, 1000); // 1s for curtain to fade
+            }
+        };
+
+        // Function to show navigation dropdowns (called when game scene loads)
+        window.showNavigation = function() {
+            console.log('showNavigation called');
+            const gameMenu = document.getElementById('game-menu');
+            const dropdowns = document.querySelectorAll('.dropdown');
+
+            console.log('gameMenu element:', gameMenu);
+            console.log('dropdowns found:', dropdowns.length);
+
+            // Show the game menu
+            if (gameMenu) {
+                gameMenu.classList.add('show');
+                console.log('Added .show class to game-menu');
+            } else {
+                console.error('game-menu element not found!');
+            }
+
+            // Pop in dropdown labels one at a time
+            dropdowns.forEach(dropdown => {
+                dropdown.classList.add('pop-in');
+            });
+            console.log('showNavigation complete');
+        };
+    </script>
+</body>
+</html>
+
+

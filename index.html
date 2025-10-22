@@ -1,114 +1,612 @@
-﻿
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <meta name="robots" content="noindex, nofollow, noicon">
     <title>Ultimate Sim</title>
 
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
     <!-- Include libraries and other scripts -->
-    <script src="phaser.min.js" type="text/javascript"></script>
+    <script src="lib/phaser.min.js" type="text/javascript"></script>
     <script src="utils/EventDispatcher.js" type="text/javascript"></script>
     <script src="utils/UIBlock.js" type="text/javascript"></script>
     <script src="utils/DropdownMenu.js" type="text/javascript"></script>
-    <script src="./scenes/TitleScene.js" type="module"></script>
+    <script src="utils/HTMLControls.js" type="text/javascript"></script>
+    <script src="utils/BorderAnimation.js" type="text/javascript"></script>
+    <script src="utils/TitleUI.js" type="text/javascript"></script>
+    <script src="./scenes/TitleScene.js?v=8800002" type="module"></script>
 
-    <script type="module" src="./scenes/GameScene.js"></script>
+    <script type="module" src="./scenes/GameScene.js?v=8800033"></script>
     <script src="scenes/UIScene.js" type="text/javascript"></script>
-    <script type="module" src="os.js"></script>
+    <script type="module" src="services/os.js?v=8800001"></script>
 
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./main.js?v=9999"></script>
     <script type="module" src="./scenes/DataScene.js"></script>
-    <script type="module" src="./main.js"></script>
-    <script type="module" src="./location.js"></script>
+    <script type="module" src="services/location.js"></script>
 
     <!-- Include Turf.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
 
-    <!-- Include main.js as a module -->
-    <!-- Style -->
-    <style type="text/css">
-        body {
-            width: 100vw;
-            min-height: 100vh;
-            margin: 0;
-            padding: 0;
-            background: linear-gradient(270deg, #a7e3ff, #E8F8FF, #F7FDFF, #a7e3ff);
-            background-size: 600% 600%;
-            animation: gradientAnimation 30s ease infinite;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        @keyframes gradientAnimation {
-            0% {
-                background-position: 0% 50%;
-            }
-
-            50% {
-                background-position: 100% 50%;
-            }
-
-            100% {
-                background-position: 0% 50%;
-            }
-        }
-
-        #outer {
-            width: 75%; /* ✅ Game takes 75% of browser width, 12.5% margin each side */
-            max-width: 1300px; /* ✅ Cap at reasonable size for large screens */
-            flex: 1;
-            margin-top: 8vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 40px;
-        }
-
-        #container {
-            width: 100%;
-            aspect-ratio: 5 / 3; /* Maintains 5:3 ratio */
-            max-width: 100%;
-            border: 2px solid black;
-            background-color: black;
-            border-radius: 10px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        canvas {
-            width: 100% !important;
-            height: 100% !important;
-            display: block;
-        }
-
-        #credits {
-            font-family: Courier New, Courier, monospace;
-            color: orangered;
-            text-align: left;
-            padding: 20px;
-            width: 100%;
-            padding-left: 70%;
-            box-sizing: border-box;
-        }
-    </style>
+    <!-- External CSS -->
+    <link rel="stylesheet" href="styles.css?v=8800006">
 </head>
 <body>
     <div id="outer" width="100wh" height'="100wv">
-        <div id="container" width="1000" height="600"></div>
-    </div> <!-- Fixed id attribute -->
-    <div id="credits">
-        <p>
-            <br />Fuller Games, 2025<br /><br /> <u>Programming<br /></u><br />Tess Elliot<br /> Sagar Singh<br />
-            <br /><u>Graphics<br /><br /></u> Leilani Armstrong<br />Brian Bortz<br />Tess Elliot <br />Sara Mohajer<br />Saray Suarez<br />Jewell Watters<br />Skylar Wright<br />
-            <br /><u>Climate Advisors</u><br /><br />Gabrielle R. Brown<br /> Renee McPherson<br />
-            <br /><u>˙⋆Thanks to⋆˙</u><br /><br />Rhizome, Inc<br /><br />Arts and Humanities Forum<br />University of Oklahoma<br /><br />
-        </p>
+        <!-- Sky Gradient Overlay -->
+        <div id="sky-overlay"></div>
+
+        <!-- Blue Gradient Overlay -->
+        <div id="gradient-overlay"></div>
+
+        <!-- Top Black Spacer -->
+        <div id="top-spacer"></div>
+
+        <!-- Game Container -->
+        <div id="container" width="1000" height="600">
+            <!-- Title Screen UI Overlay -->
+            <div id="title-ui">
+                <!-- Game Title -->
+                <div id="game-title">
+                    <span>U</span><span>L</span><span>T</span><span>I</span><span>M</span><span>A</span><span>T</span><span>E</span><span> </span><span>S</span><span>I</span><span>M</span>
+                </div>
+
+                <!-- Enter/Credits Toggle Block -->
+                <div id="enter-credits-toggle">
+                    <div id="enter-text" class="visible">enter the game</div>
+                    <div id="credits-text" style="display: none;">Credits</div>
+                </div>
+
+                <!-- Invisible spacer -->
+                <br style="opacity: 0; pointer-events: none;">
+
+                <button class="title-button" id="start-game-btn">Start</button>
+                <button class="title-button" id="resume-game-btn">Resume Game</button>
+
+                <!-- Location buttons (shown after Start is clicked) -->
+                <button class="title-button" id="current-location-btn" style="display: none;">Current Location</button>
+                <button class="title-button" id="manual-location-btn" style="display: none;">Manual Location</button>
+
+                <!-- Credits Display (typewriter effect) -->
+                <div id="title-credits-display"></div>
+            </div>
+        </div>
+
+        <!-- SVG definitions for wave clip paths -->
+        <svg width="0" height="0">
+            <defs>
+                <clipPath id="wave-clip" clipPathUnits="objectBoundingBox">
+                    <path id="wave-clip-path" d="
+                        M -0.1,0
+                        L 1.1,0
+                        L 1.1,0.93
+                        Q 1.075,0.90 1.05,0.93
+                        Q 1.025,0.96 1.0,0.93
+                        Q 0.975,0.90 0.95,0.93
+                        Q 0.925,0.96 0.9,0.93
+                        Q 0.875,0.90 0.85,0.93
+                        Q 0.825,0.96 0.8,0.93
+                        Q 0.775,0.90 0.75,0.93
+                        Q 0.725,0.96 0.7,0.93
+                        Q 0.675,0.90 0.65,0.93
+                        Q 0.625,0.96 0.6,0.93
+                        Q 0.575,0.90 0.55,0.93
+                        Q 0.525,0.96 0.5,0.93
+                        Q 0.475,0.90 0.45,0.93
+                        Q 0.425,0.96 0.4,0.93
+                        Q 0.375,0.90 0.35,0.93
+                        Q 0.325,0.96 0.3,0.93
+                        Q 0.275,0.90 0.25,0.93
+                        Q 0.225,0.96 0.2,0.93
+                        Q 0.175,0.90 0.15,0.93
+                        Q 0.125,0.96 0.1,0.93
+                        Q 0.075,0.90 0.05,0.93
+                        Q 0.025,0.96 0.0,0.93
+                        Q -0.025,0.90 -0.05,0.93
+                        Q -0.075,0.96 -0.1,0.93
+                        Z">
+                        <animateTransform
+                            attributeName="transform"
+                            attributeType="XML"
+                            type="translate"
+                            values="0 0; 0.1 0"
+                            keyTimes="0; 1"
+                            dur="2s"
+                            calcMode="linear"
+                            repeatCount="indefinite"/>
+                        <animate
+                            attributeName="d"
+                            values="
+                                M -0.1,0 L 1.1,0 L 1.1,0.93 Q 1.075,0.90 1.05,0.93 Q 1.025,0.96 1.0,0.93 Q 0.975,0.90 0.95,0.93 Q 0.925,0.96 0.9,0.93 Q 0.875,0.90 0.85,0.93 Q 0.825,0.96 0.8,0.93 Q 0.775,0.90 0.75,0.93 Q 0.725,0.96 0.7,0.93 Q 0.675,0.90 0.65,0.93 Q 0.625,0.96 0.6,0.93 Q 0.575,0.90 0.55,0.93 Q 0.525,0.96 0.5,0.93 Q 0.475,0.90 0.45,0.93 Q 0.425,0.96 0.4,0.93 Q 0.375,0.90 0.35,0.93 Q 0.325,0.96 0.3,0.93 Q 0.275,0.90 0.25,0.93 Q 0.225,0.96 0.2,0.93 Q 0.175,0.90 0.15,0.93 Q 0.125,0.96 0.1,0.93 Q 0.075,0.90 0.05,0.93 Q 0.025,0.96 0.0,0.93 Q -0.025,0.90 -0.05,0.93 Q -0.075,0.96 -0.1,0.93 Z;
+                                M -0.1,0 L 1.1,0 L 1.1,0.93 Q 1.075,0.915 1.05,0.93 Q 1.025,0.945 1.0,0.93 Q 0.975,0.915 0.95,0.93 Q 0.925,0.945 0.9,0.93 Q 0.875,0.915 0.85,0.93 Q 0.825,0.945 0.8,0.93 Q 0.775,0.915 0.75,0.93 Q 0.725,0.945 0.7,0.93 Q 0.675,0.915 0.65,0.93 Q 0.625,0.945 0.6,0.93 Q 0.575,0.915 0.55,0.93 Q 0.525,0.945 0.5,0.93 Q 0.475,0.915 0.45,0.93 Q 0.425,0.945 0.4,0.93 Q 0.375,0.915 0.35,0.93 Q 0.325,0.945 0.3,0.93 Q 0.275,0.915 0.25,0.93 Q 0.225,0.945 0.2,0.93 Q 0.175,0.915 0.15,0.93 Q 0.125,0.945 0.1,0.93 Q 0.075,0.915 0.05,0.93 Q 0.025,0.945 0.0,0.93 Q -0.025,0.915 -0.05,0.93 Q -0.075,0.945 -0.1,0.93 Z;
+                                M -0.1,0 L 1.1,0 L 1.1,0.93 Q 1.075,0.90 1.05,0.93 Q 1.025,0.96 1.0,0.93 Q 0.975,0.90 0.95,0.93 Q 0.925,0.96 0.9,0.93 Q 0.875,0.90 0.85,0.93 Q 0.825,0.96 0.8,0.93 Q 0.775,0.90 0.75,0.93 Q 0.725,0.96 0.7,0.93 Q 0.675,0.90 0.65,0.93 Q 0.625,0.96 0.6,0.93 Q 0.575,0.90 0.55,0.93 Q 0.525,0.96 0.5,0.93 Q 0.475,0.90 0.45,0.93 Q 0.425,0.96 0.4,0.93 Q 0.375,0.90 0.35,0.93 Q 0.325,0.96 0.3,0.93 Q 0.275,0.90 0.25,0.93 Q 0.225,0.96 0.2,0.93 Q 0.175,0.90 0.15,0.93 Q 0.125,0.96 0.1,0.93 Q 0.075,0.90 0.05,0.93 Q 0.025,0.96 0.0,0.93 Q -0.025,0.90 -0.05,0.93 Q -0.075,0.96 -0.1,0.93 Z"
+                            dur="4s"
+                            calcMode="linear"
+                            repeatCount="indefinite"/>
+                    </path>
+                </clipPath>
+
+                <!-- Wave clip inverse for stream - starts at 0.85, lowers to 0.93 on curtain raise -->
+                <clipPath id="wave-clip-inverse" clipPathUnits="objectBoundingBox">
+                    <path id="wave-clip-inverse-path" d="
+                        M -0.1,0.85
+                        Q -0.075,0.82 -0.05,0.85
+                        Q -0.025,0.88 0.0,0.85
+                        Q 0.025,0.82 0.05,0.85
+                        Q 0.075,0.88 0.1,0.85
+                        Q 0.125,0.82 0.15,0.85
+                        Q 0.175,0.88 0.2,0.85
+                        Q 0.225,0.82 0.25,0.85
+                        Q 0.275,0.88 0.3,0.85
+                        Q 0.325,0.82 0.35,0.85
+                        Q 0.375,0.88 0.4,0.85
+                        Q 0.425,0.82 0.45,0.85
+                        Q 0.475,0.88 0.5,0.85
+                        Q 0.525,0.82 0.55,0.85
+                        Q 0.575,0.88 0.6,0.85
+                        Q 0.625,0.82 0.65,0.85
+                        Q 0.675,0.88 0.7,0.85
+                        Q 0.725,0.82 0.75,0.85
+                        Q 0.775,0.88 0.8,0.85
+                        Q 0.825,0.82 0.85,0.85
+                        Q 0.875,0.88 0.9,0.85
+                        Q 0.925,0.82 0.95,0.85
+                        Q 0.975,0.88 1.0,0.85
+                        Q 1.025,0.82 1.05,0.85
+                        Q 1.075,0.88 1.1,0.85
+                        L 1.1,1
+                        L -0.1,1
+                        Z">
+                        <animateTransform
+                            attributeName="transform"
+                            attributeType="XML"
+                            type="translate"
+                            values="0 0; -0.1 0"
+                            keyTimes="0; 1"
+                            dur="2s"
+                            calcMode="linear"
+                            repeatCount="indefinite"/>
+                        <animate
+                            id="stream-wave-position"
+                            attributeName="d"
+                            values="
+                                M -0.1,0.85 Q -0.075,0.82 -0.05,0.85 Q -0.025,0.88 0.0,0.85 Q 0.025,0.82 0.05,0.85 Q 0.075,0.88 0.1,0.85 Q 0.125,0.82 0.15,0.85 Q 0.175,0.88 0.2,0.85 Q 0.225,0.82 0.25,0.85 Q 0.275,0.88 0.3,0.85 Q 0.325,0.82 0.35,0.85 Q 0.375,0.88 0.4,0.85 Q 0.425,0.82 0.45,0.85 Q 0.475,0.88 0.5,0.85 Q 0.525,0.82 0.55,0.85 Q 0.575,0.88 0.6,0.85 Q 0.625,0.82 0.65,0.85 Q 0.675,0.88 0.7,0.85 Q 0.725,0.82 0.75,0.85 Q 0.775,0.88 0.8,0.85 Q 0.825,0.82 0.85,0.85 Q 0.875,0.88 0.9,0.85 Q 0.925,0.82 0.95,0.85 Q 0.975,0.88 1.0,0.85 Q 1.025,0.82 1.05,0.85 Q 1.075,0.88 1.1,0.85 L 1.1,1 L -0.1,1 Z;
+                                M -0.1,0.85 Q -0.075,0.835 -0.05,0.85 Q -0.025,0.865 0.0,0.85 Q 0.025,0.835 0.05,0.85 Q 0.075,0.865 0.1,0.85 Q 0.125,0.835 0.15,0.85 Q 0.175,0.865 0.2,0.85 Q 0.225,0.835 0.25,0.85 Q 0.275,0.865 0.3,0.85 Q 0.325,0.835 0.35,0.85 Q 0.375,0.865 0.4,0.85 Q 0.425,0.835 0.45,0.85 Q 0.475,0.865 0.5,0.85 Q 0.525,0.835 0.55,0.85 Q 0.575,0.865 0.6,0.85 Q 0.625,0.835 0.65,0.85 Q 0.675,0.865 0.7,0.85 Q 0.725,0.835 0.75,0.85 Q 0.775,0.865 0.8,0.85 Q 0.825,0.835 0.85,0.85 Q 0.875,0.865 0.9,0.85 Q 0.925,0.835 0.95,0.85 Q 0.975,0.865 1.0,0.85 Q 1.025,0.835 1.05,0.85 Q 1.075,0.865 1.1,0.85 L 1.1,1 L -0.1,1 Z;
+                                M -0.1,0.85 Q -0.075,0.82 -0.05,0.85 Q -0.025,0.88 0.0,0.85 Q 0.025,0.82 0.05,0.85 Q 0.075,0.88 0.1,0.85 Q 0.125,0.82 0.15,0.85 Q 0.175,0.88 0.2,0.85 Q 0.225,0.82 0.25,0.85 Q 0.275,0.88 0.3,0.85 Q 0.325,0.82 0.35,0.85 Q 0.375,0.88 0.4,0.85 Q 0.425,0.82 0.45,0.85 Q 0.475,0.88 0.5,0.85 Q 0.525,0.82 0.55,0.85 Q 0.575,0.88 0.6,0.85 Q 0.625,0.82 0.65,0.85 Q 0.675,0.88 0.7,0.85 Q 0.725,0.82 0.75,0.85 Q 0.775,0.88 0.8,0.85 Q 0.825,0.82 0.85,0.85 Q 0.875,0.88 0.9,0.85 Q 0.925,0.82 0.95,0.85 Q 0.975,0.88 1.0,0.85 Q 1.025,0.82 1.05,0.85 Q 1.075,0.88 1.1,0.85 L 1.1,1 L -0.1,1 Z"
+                            dur="4s"
+                            calcMode="linear"
+                            repeatCount="indefinite"/>
+                    </path>
+                </clipPath>
+            </defs>
+        </svg>
+
+        <!-- The Stream -->
+        <div id="the-stream"></div>
+
+        <!-- Land Use Info Display -->
+        <div id="land-use-info"></div>
+
+        <!-- Climate Score Display -->
+        <div id="climate-score"></div>
+
+        <!-- Navigation Bar -->
+        <div id="nav-bar">
+            <div id="game-menu">
+                <div class="menu-bar">
+                    <!-- Navigate Dropdown -->
+                    <div class="dropdown">
+                        <span class="dropdown-label">Navigate</span>
+                        <div class="dropdown-content">
+                            <div class="menu-item" data-action="move">Move</div>
+                            <div class="menu-item" data-action="zoom">Zoom</div>
+                            <div class="menu-item" data-action="rotate">Rotate</div>
+                            <div class="menu-item" data-action="home">Center</div>
+                            <div class="menu-item" data-action="info">Info</div>
+                        </div>
+                    </div>
+
+                    <!-- Build Dropdown -->
+                    <div class="dropdown">
+                        <span class="dropdown-label">Build</span>
+                        <div class="dropdown-content">
+                            <div class="menu-item" data-action="solar">Solar</div>
+                            <div class="menu-item" data-action="wind">Wind</div>
+                            <div class="menu-item" data-action="hydrogen">Hydrogen</div>
+                            <div class="menu-item" data-action="trees">Trees</div>
+                            <div class="menu-item" data-action="apartments">Apartments</div>
+                            <div class="menu-item" data-action="bike">Bike Lane</div>
+                            <div class="menu-item" data-action="road">Road</div>
+                        </div>
+                    </div>
+
+                    <!-- Tools Dropdown -->
+                    <div class="dropdown">
+                        <span class="dropdown-label">Tools</span>
+                        <div class="dropdown-content">
+                            <div class="menu-item" data-action="bulldoze">Bulldoze</div>
+                            <div class="menu-item" data-action="undo">Undo</div>
+                            <div class="menu-item" data-action="save">Save</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
+
+    <script>
+        // Boolean state for hover tracking
+        let hasHoveredTitle = false;
+
+        // Initialize page load and show title buttons
+        window.addEventListener('load', () => {
+            // Change body background from light blue to black
+            document.body.classList.add('loaded');
+
+            // Don't show title buttons automatically - wait for curtain to rise
+            // Title buttons will be shown in raiseCurtain() after curtain animation completes
+
+            // Set up Enter/Credits toggle functionality
+            const gameTitle = document.getElementById('game-title');
+            const enterText = document.getElementById('enter-text');
+            const creditsText = document.getElementById('credits-text');
+            const creditsDisplay = document.getElementById('title-credits-display');
+            const gradientOverlay = document.getElementById('gradient-overlay');
+
+            // Hover IN on ULTIMATE SIM - set boolean to true and show blue bands
+            if (gameTitle) {
+                gameTitle.addEventListener('mouseenter', () => {
+                    console.log('Mouse entered ULTIMATE SIM');
+                    hasHoveredTitle = true;
+
+                    // Add blue bands to gradient overlay
+                    if (gradientOverlay) {
+                        gradientOverlay.classList.add('blue-bands');
+                    }
+                });
+
+                // Hover OUT of ULTIMATE SIM - remove blue bands
+                gameTitle.addEventListener('mouseleave', () => {
+                    // Remove blue bands
+                    if (gradientOverlay) {
+                        gradientOverlay.classList.remove('blue-bands');
+                    }
+                });
+            }
+
+            // Hover IN on Credits text - show credits, reset boolean
+            if (creditsText) {
+                creditsText.addEventListener('mouseleave', () => {
+                    hasHoveredTitle = false; // Reset boolean
+                    showCredits();
+                });
+
+                // Click Credits text - show typewriter credits
+                creditsText.addEventListener('click', () => {
+                    showCredits();
+                });
+            }
+
+            // Hover on credits display - keep it visible
+            if (creditsDisplay) {
+                creditsDisplay.addEventListener('mouseenter', () => {
+                    console.log('Mouse entered credits display - keeping visible');
+                });
+
+                // Hover OUT of credits display - hide it
+                creditsDisplay.addEventListener('mouseleave', () => {
+                    console.log('Mouse left credits display - hiding credits');
+                    hideCredits();
+                });
+            }
+
+            // Hover IN on ULTIMATE SIM again - swap back to enter the game, reset boolean
+            if (gameTitle && creditsText && enterText) {
+                gameTitle.addEventListener('mouseenter', () => {
+                    // If Credits is showing, swap back to enter the game
+                    if (creditsText.style.display === 'block') {
+                        console.log('Swapping Credits back to enter the game');
+                        creditsText.style.display = 'none';
+                        enterText.style.display = 'block';
+                        hasHoveredTitle = false; // Reset boolean
+                    }
+                });
+            }
+
+            // Click enter text - raise curtain
+            if (enterText) {
+                enterText.addEventListener('click', () => {
+                    console.log('Enter text clicked - raising curtain');
+                    window.raiseCurtain();
+                });
+            }
+
+            // Function to show credits with typewriter effect
+            function showCredits() {
+                if (!creditsDisplay) return;
+
+                const creditsHTML = `
+                    Fuller Games, 2025<br /><br />
+                    <u>Programming</u><br />Tess Elliot<br />Sagar Singh<br /><br />
+                    <u>Graphics</u><br />Leilani Armstrong<br />Brian Bortz<br />Tess Elliot<br />Sara Mohajer<br />Saray Suarez<br />Jewell Watters<br />Skylar Wright<br /><br />
+                    <u>Climate Advisors</u><br />Gabrielle R. Brown<br />Renee McPherson<br /><br />
+                    <u>˙⋆Thanks to⋆˙</u><br />Rhizome, Inc<br />Arts and Humanities Forum<br />University of Oklahoma
+                `;
+
+                // Convert HTML to plain text with line breaks
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = creditsHTML;
+                const lines = creditsHTML.split('<br />').map(line => line.replace(/<[^>]*>/g, ''));
+
+                creditsDisplay.innerHTML = '';
+                creditsDisplay.classList.add('show');
+
+                let lineIndex = 0;
+                const typewriterInterval = setInterval(() => {
+                    if (lineIndex < lines.length) {
+                        const line = lines[lineIndex];
+                        const p = document.createElement('p');
+                        p.style.margin = '0';
+                        p.innerHTML = line;
+                        creditsDisplay.appendChild(p);
+                        lineIndex++;
+                    } else {
+                        clearInterval(typewriterInterval);
+                    }
+                }, 100); // 100ms per line
+            }
+
+            // Function to hide credits
+            function hideCredits() {
+                if (creditsDisplay) {
+                    creditsDisplay.classList.remove('show');
+                    creditsDisplay.innerHTML = '';
+                }
+            }
+        });
+
+        // Function to show title buttons with staggered animation
+        window.showTitleButtons = function() {
+            const startBtn = document.getElementById('start-game-btn');
+            const resumeBtn = document.getElementById('resume-game-btn');
+
+            // Set display to block first, then add animation class
+            if (startBtn) {
+                startBtn.style.display = 'block';
+                startBtn.classList.add('pop-in');
+            }
+            if (resumeBtn) {
+                resumeBtn.style.display = 'block';
+                resumeBtn.classList.add('pop-in');
+            }
+        };
+
+        // Function to show title buttons immediately (no animation)
+        window.titleButtonsNow = function() {
+            const startBtn = document.getElementById('start-game-btn');
+            const resumeBtn = document.getElementById('resume-game-btn');
+
+            if (startBtn) {
+                startBtn.style.display = 'block';
+                startBtn.style.opacity = '1';
+            }
+            if (resumeBtn) {
+                resumeBtn.style.display = 'block';
+                resumeBtn.style.opacity = '1';
+            }
+        };
+
+        // Function to trigger curtain rise (called from TitleUI.js)
+        window.curtainClickCount = 0;
+        window.raiseCurtain = function() {
+            window.curtainClickCount++;
+            console.log('raiseCurtain called, click count:', window.curtainClickCount);
+
+            const gradientOverlay = document.getElementById('gradient-overlay');
+            const skyOverlay = document.getElementById('sky-overlay');
+            const topSpacer = document.getElementById('top-spacer');
+            const gameTitle = document.getElementById('game-title');
+            const enterCreditsToggle = document.getElementById('enter-credits-toggle');
+            const theStream = document.getElementById('the-stream');
+
+            // If second click, immediately delete everything and show menu
+            if (window.curtainClickCount === 2) {
+                console.log('Second click detected - skipping animation and showing menu immediately');
+                // Don't remove gradientOverlay - keep curtain
+                if (skyOverlay) skyOverlay.remove();
+                if (gameTitle) gameTitle.remove();
+                if (enterCreditsToggle) enterCreditsToggle.remove();
+                if (theStream) theStream.classList.add('lowered');
+                // Show menu buttons immediately (no animation)
+                window.titleButtonsNow();
+                return;
+            }
+
+            if (gradientOverlay) {
+                // Sample the sky gradient color at center of window
+                const skyOverlay = document.getElementById('sky-overlay');
+                if (skyOverlay) {
+                    // Create a temporary canvas to sample the gradient color
+                    const canvas = document.createElement('canvas');
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                    const ctx = canvas.getContext('2d');
+
+                    // Get the computed gradient from sky overlay
+                    const skyStyles = window.getComputedStyle(skyOverlay);
+                    const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+
+                    // Recreate the gradient (270deg means right to left)
+                    gradient.addColorStop(0, '#a7e3ff');
+                    gradient.addColorStop(0.33, '#E8F8FF');
+                    gradient.addColorStop(0.66, '#F7FDFF');
+                    gradient.addColorStop(1, '#a7e3ff');
+
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // Sample the color at center of window
+                    const centerX = Math.floor(canvas.width / 2);
+                    const centerY = Math.floor(canvas.height / 2);
+                    const imageData = ctx.getImageData(centerX, centerY, 1, 1).data;
+                    const sampledColor = `rgb(${imageData[0]}, ${imageData[1]}, ${imageData[2]})`;
+
+                    console.log('Sampled sky color at center:', sampledColor);
+
+                    // Set the curtain background to the sampled color
+                    gradientOverlay.style.background = sampledColor;
+
+                    // Fade curtain to black over 2 seconds
+                    setTimeout(() => {
+                        gradientOverlay.style.transition = 'background-color 2s ease-out';
+                        gradientOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+                    }, 100); // Small delay to ensure the color is applied first
+                }
+
+                // Raise the curtain by animating its position
+                // Animate curtain SVG path from 0.93 to 0.07 over 2 seconds
+                const curtainAnimPath = document.getElementById('wave-clip-path');
+                if (curtainAnimPath) {
+                    // Get the animate element that controls the wave shape
+                    const curtainShapeAnim = curtainAnimPath.querySelector('animate[attributeName="d"]');
+
+                    if (curtainShapeAnim) {
+                        // Create new animation values for raised curtain position (0.07 = near top edge)
+                        const raisedCurtainValues = `
+                            M -0.1,0 L 1.1,0 L 1.1,0.07 Q 1.075,0.04 1.05,0.07 Q 1.025,0.1 1.0,0.07 Q 0.975,0.04 0.95,0.07 Q 0.925,0.1 0.9,0.07 Q 0.875,0.04 0.85,0.07 Q 0.825,0.1 0.8,0.07 Q 0.775,0.04 0.75,0.07 Q 0.725,0.1 0.7,0.07 Q 0.675,0.04 0.65,0.07 Q 0.625,0.1 0.6,0.07 Q 0.575,0.04 0.55,0.07 Q 0.525,0.1 0.5,0.07 Q 0.475,0.04 0.45,0.07 Q 0.425,0.1 0.4,0.07 Q 0.375,0.04 0.35,0.07 Q 0.325,0.1 0.3,0.07 Q 0.275,0.04 0.25,0.07 Q 0.225,0.1 0.2,0.07 Q 0.175,0.04 0.15,0.07 Q 0.125,0.1 0.1,0.07 Q 0.075,0.04 0.05,0.07 Q 0.025,0.1 0.0,0.07 Q -0.025,0.04 -0.05,0.07 Q -0.075,0.1 -0.1,0.07 Z;
+                            M -0.1,0 L 1.1,0 L 1.1,0.07 Q 1.075,0.055 1.05,0.07 Q 1.025,0.085 1.0,0.07 Q 0.975,0.055 0.95,0.07 Q 0.925,0.085 0.9,0.07 Q 0.875,0.055 0.85,0.07 Q 0.825,0.085 0.8,0.07 Q 0.775,0.055 0.75,0.07 Q 0.725,0.085 0.7,0.07 Q 0.675,0.055 0.65,0.07 Q 0.625,0.085 0.6,0.07 Q 0.575,0.055 0.55,0.07 Q 0.525,0.085 0.5,0.07 Q 0.475,0.055 0.45,0.07 Q 0.425,0.085 0.4,0.07 Q 0.375,0.055 0.35,0.07 Q 0.325,0.085 0.3,0.07 Q 0.275,0.055 0.25,0.07 Q 0.225,0.085 0.2,0.07 Q 0.175,0.055 0.15,0.07 Q 0.125,0.085 0.1,0.07 Q 0.075,0.055 0.05,0.07 Q 0.025,0.085 0.0,0.07 Q -0.025,0.055 -0.05,0.07 Q -0.075,0.085 -0.1,0.07 Z;
+                            M -0.1,0 L 1.1,0 L 1.1,0.07 Q 1.075,0.04 1.05,0.07 Q 1.025,0.1 1.0,0.07 Q 0.975,0.04 0.95,0.07 Q 0.925,0.1 0.9,0.07 Q 0.875,0.04 0.85,0.07 Q 0.825,0.1 0.8,0.07 Q 0.775,0.04 0.75,0.07 Q 0.725,0.1 0.7,0.07 Q 0.675,0.04 0.65,0.07 Q 0.625,0.1 0.6,0.07 Q 0.575,0.04 0.55,0.07 Q 0.525,0.1 0.5,0.07 Q 0.475,0.04 0.45,0.07 Q 0.425,0.1 0.4,0.07 Q 0.375,0.04 0.35,0.07 Q 0.325,0.1 0.3,0.07 Q 0.275,0.04 0.25,0.07 Q 0.225,0.1 0.2,0.07 Q 0.175,0.04 0.15,0.07 Q 0.125,0.1 0.1,0.07 Q 0.075,0.04 0.05,0.07 Q 0.025,0.1 0.0,0.07 Q -0.025,0.04 -0.05,0.07 Q -0.075,0.1 -0.1,0.07 Z`;
+
+                        // Create transition animation with ease-in
+                        const curtainTransition = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+                        curtainTransition.setAttribute('attributeName', 'd');
+                        curtainTransition.setAttribute('from', curtainAnimPath.getAttribute('d'));
+                        curtainTransition.setAttribute('to', 'M -0.1,0 L 1.1,0 L 1.1,0.07 Q 1.075,0.04 1.05,0.07 Q 1.025,0.1 1.0,0.07 Q 0.975,0.04 0.95,0.07 Q 0.925,0.1 0.9,0.07 Q 0.875,0.04 0.85,0.07 Q 0.825,0.1 0.8,0.07 Q 0.775,0.04 0.75,0.07 Q 0.725,0.1 0.7,0.07 Q 0.675,0.04 0.65,0.07 Q 0.625,0.1 0.6,0.07 Q 0.575,0.04 0.55,0.07 Q 0.525,0.1 0.5,0.07 Q 0.475,0.04 0.45,0.07 Q 0.425,0.1 0.4,0.07 Q 0.375,0.04 0.35,0.07 Q 0.325,0.1 0.3,0.07 Q 0.275,0.04 0.25,0.07 Q 0.225,0.1 0.2,0.07 Q 0.175,0.04 0.15,0.07 Q 0.125,0.1 0.1,0.07 Q 0.075,0.04 0.05,0.07 Q 0.025,0.1 0.0,0.07 Q -0.025,0.04 -0.05,0.07 Q -0.075,0.1 -0.1,0.07 Z');
+                        curtainTransition.setAttribute('dur', '2s');
+                        curtainTransition.setAttribute('calcMode', 'spline');
+                        curtainTransition.setAttribute('keyTimes', '0; 1');
+                        curtainTransition.setAttribute('keySplines', '0.42 0 1 1'); // ease-in cubic bezier
+                        curtainTransition.setAttribute('fill', 'freeze');
+
+                        curtainAnimPath.appendChild(curtainTransition);
+                        curtainTransition.beginElement();
+
+                        // After transition, update the main animation to use new values
+                        setTimeout(() => {
+                            curtainShapeAnim.setAttribute('values', raisedCurtainValues);
+                        }, 2000);
+                    }
+                }
+
+                // Also raise the sky overlay
+                if (skyOverlay) {
+                    skyOverlay.classList.add('rising');
+                }
+
+                // Lower the stream (2s animation via CSS and SVG)
+                if (theStream) {
+                    theStream.classList.add('lowered');
+
+                    // Animate SVG path from 0.85 to 0.93 over 2 seconds
+                    const streamPath = document.getElementById('stream-wave-position');
+                    if (streamPath) {
+                        // Create new animation values for lowered position (0.93 center)
+                        const loweredValues = `
+                            M -0.1,0.93 Q -0.075,0.90 -0.05,0.93 Q -0.025,0.96 0.0,0.93 Q 0.025,0.90 0.05,0.93 Q 0.075,0.96 0.1,0.93 Q 0.125,0.90 0.15,0.93 Q 0.175,0.96 0.2,0.93 Q 0.225,0.90 0.25,0.93 Q 0.275,0.96 0.3,0.93 Q 0.325,0.90 0.35,0.93 Q 0.375,0.96 0.4,0.93 Q 0.425,0.90 0.45,0.93 Q 0.475,0.96 0.5,0.93 Q 0.525,0.90 0.55,0.93 Q 0.575,0.96 0.6,0.93 Q 0.625,0.90 0.65,0.93 Q 0.675,0.96 0.7,0.93 Q 0.725,0.90 0.75,0.93 Q 0.775,0.96 0.8,0.93 Q 0.825,0.90 0.85,0.93 Q 0.875,0.96 0.9,0.93 Q 0.925,0.90 0.95,0.93 Q 0.975,0.96 1.0,0.93 Q 1.025,0.90 1.05,0.93 Q 1.075,0.96 1.1,0.93 L 1.1,1 L -0.1,1 Z;
+                            M -0.1,0.93 Q -0.075,0.915 -0.05,0.93 Q -0.025,0.945 0.0,0.93 Q 0.025,0.915 0.05,0.93 Q 0.075,0.945 0.1,0.93 Q 0.125,0.915 0.15,0.93 Q 0.175,0.945 0.2,0.93 Q 0.225,0.915 0.25,0.93 Q 0.275,0.945 0.3,0.93 Q 0.325,0.915 0.35,0.93 Q 0.375,0.945 0.4,0.93 Q 0.425,0.915 0.45,0.93 Q 0.475,0.945 0.5,0.93 Q 0.525,0.915 0.55,0.93 Q 0.575,0.945 0.6,0.93 Q 0.625,0.915 0.65,0.93 Q 0.675,0.945 0.7,0.93 Q 0.725,0.915 0.75,0.93 Q 0.775,0.945 0.8,0.93 Q 0.825,0.915 0.85,0.93 Q 0.875,0.945 0.9,0.93 Q 0.925,0.915 0.95,0.93 Q 0.975,0.945 1.0,0.93 Q 1.025,0.915 1.05,0.93 Q 1.075,0.945 1.1,0.93 L 1.1,1 L -0.1,1 Z;
+                            M -0.1,0.93 Q -0.075,0.90 -0.05,0.93 Q -0.025,0.96 0.0,0.93 Q 0.025,0.90 0.05,0.93 Q 0.075,0.96 0.1,0.93 Q 0.125,0.90 0.15,0.93 Q 0.175,0.96 0.2,0.93 Q 0.225,0.90 0.25,0.93 Q 0.275,0.96 0.3,0.93 Q 0.325,0.90 0.35,0.93 Q 0.375,0.96 0.4,0.93 Q 0.425,0.90 0.45,0.93 Q 0.475,0.96 0.5,0.93 Q 0.525,0.90 0.55,0.93 Q 0.575,0.96 0.6,0.93 Q 0.625,0.90 0.65,0.93 Q 0.675,0.96 0.7,0.93 Q 0.725,0.90 0.75,0.93 Q 0.775,0.96 0.8,0.93 Q 0.825,0.90 0.85,0.93 Q 0.875,0.96 0.9,0.93 Q 0.925,0.90 0.95,0.93 Q 0.975,0.96 1.0,0.93 Q 1.025,0.90 1.05,0.93 Q 1.075,0.96 1.1,0.93 L 1.1,1 L -0.1,1 Z`;
+
+                        // Use SMIL to transition from current position to lowered position
+                        const transitionAnim = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+                        transitionAnim.setAttribute('attributeName', 'd');
+                        // streamPath.parentElement is the <path> element
+                        const pathElement = streamPath.parentElement;
+                        transitionAnim.setAttribute('from', pathElement.getAttribute('d'));
+                        transitionAnim.setAttribute('to', 'M -0.1,0.93 Q -0.075,0.90 -0.05,0.93 Q -0.025,0.96 0.0,0.93 Q 0.025,0.90 0.05,0.93 Q 0.075,0.96 0.1,0.93 Q 0.125,0.90 0.15,0.93 Q 0.175,0.96 0.2,0.93 Q 0.225,0.90 0.25,0.93 Q 0.275,0.96 0.3,0.93 Q 0.325,0.90 0.35,0.93 Q 0.375,0.96 0.4,0.93 Q 0.425,0.90 0.45,0.93 Q 0.475,0.96 0.5,0.93 Q 0.525,0.90 0.55,0.93 Q 0.575,0.96 0.6,0.93 Q 0.625,0.90 0.65,0.93 Q 0.675,0.96 0.7,0.93 Q 0.725,0.90 0.75,0.93 Q 0.775,0.96 0.8,0.93 Q 0.825,0.90 0.85,0.93 Q 0.875,0.96 0.9,0.93 Q 0.925,0.90 0.95,0.93 Q 0.975,0.96 1.0,0.93 Q 1.025,0.90 1.05,0.93 Q 1.075,0.96 1.1,0.93 L 1.1,1 L -0.1,1 Z');
+                        transitionAnim.setAttribute('dur', '2s');
+                        transitionAnim.setAttribute('fill', 'freeze');
+
+                        pathElement.appendChild(transitionAnim);
+                        transitionAnim.beginElement();
+
+                        // After transition, update the main animation to use new values
+                        setTimeout(() => {
+                            streamPath.setAttribute('values', loweredValues);
+                        }, 2000);
+                    }
+                }
+
+                // Turn top spacer black when curtain starts rising
+                if (topSpacer) {
+                    topSpacer.classList.add('black');
+                }
+
+                // Stop ULTIMATE SIM animations and remove enter-text
+                if (gameTitle) {
+                    // Remove all animations from title
+                    const titleSpans = gameTitle.querySelectorAll('span');
+                    titleSpans.forEach(span => {
+                        span.style.animation = 'none';
+                    });
+                    gameTitle.style.animation = 'none';
+
+                    // Add rising class to fade out and translate up
+                    gameTitle.classList.add('rising');
+                }
+
+                // Remove enter-text immediately
+                const enterText = document.getElementById('enter-text');
+                if (enterText) {
+                    enterText.remove();
+                }
+
+                if (enterCreditsToggle) {
+                    enterCreditsToggle.classList.add('rising');
+                }
+
+                // Remove overlays after animation completes (but keep gradient curtain)
+                setTimeout(() => {
+                    // Don't remove gradientOverlay - it stays at the new position
+                    if (skyOverlay) skyOverlay.remove();
+                    if (gameTitle) gameTitle.remove();
+                    if (enterCreditsToggle) enterCreditsToggle.remove();
+
+                    // NOW show the title buttons after animations complete
+                    window.showTitleButtons();
+                }, 2000); // 2s for curtain/stream animations to complete
+            }
+        };
+
+        // Function to show navigation dropdowns (called when game scene loads)
+        window.showNavigation = function() {
+            console.log('showNavigation called');
+            const gameMenu = document.getElementById('game-menu');
+            const dropdowns = document.querySelectorAll('.dropdown');
+
+            console.log('gameMenu element:', gameMenu);
+            console.log('dropdowns found:', dropdowns.length);
+
+            // Show the game menu
+            if (gameMenu) {
+                gameMenu.classList.add('show');
+                console.log('Added .show class to game-menu');
+            } else {
+                console.error('game-menu element not found!');
+            }
+
+            // Pop in dropdown labels one at a time
+            dropdowns.forEach(dropdown => {
+                dropdown.classList.add('pop-in');
+            });
+            console.log('showNavigation complete');
+        };
+    </script>
 </body>
 </html>
-
-
-

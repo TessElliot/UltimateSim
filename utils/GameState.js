@@ -70,8 +70,12 @@ export class GameState {
      * })
      */
     setTool(config) {
+        console.log('⚙️ setTool called with config:', config);
+        console.log('⚙️ Before resetAllModes - destroy:', this.destroy, 'newTile:', this.newTile);
         this.resetAllModes();
+        console.log('⚙️ After resetAllModes - destroy:', this.destroy, 'newTile:', this.newTile);
         Object.assign(this, config);
+        console.log('⚙️ After Object.assign - destroy:', this.destroy, 'newTile:', this.newTile, 'solar:', this.solar, 'wind:', this.wind, 'trees:', this.trees);
     }
 
     /**

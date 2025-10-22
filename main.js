@@ -1,7 +1,7 @@
 ﻿// main.js
 import { GameScene } from "./scenes/GameScene.js";
 import { TitleScene } from "./scenes/TitleScene.js";
-import NewspaperScene from "./scenes/NewspaperScene.js";
+// import NewspaperScene from "./scenes/NewspaperScene.js"; // DEACTIVATED
 
 window.onload = function () {
     const config = {
@@ -10,7 +10,7 @@ window.onload = function () {
         width: 1000,
         height: 600,
         backgroundColor: 0x000000,
-        scene: [TitleScene, GameScene, NewspaperScene],
+        scene: [TitleScene, GameScene], // NewspaperScene removed
         antialias: false,
         dom: {
             createContainer: true,

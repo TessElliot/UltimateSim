@@ -1,29 +1,19 @@
 ﻿import { GameState } from "../utils/GameState.js";
-import { InputManager } from "../managers/InputManager.js";
-import { SaveLoadManager } from "../managers/SaveLoadManager.js";
-import { RotationHelper } from "../helpers/RotationHelper.js";
-import { ClimateManager } from "../managers/ClimateManager.js";
-import { TileInteractionManager } from "../managers/TileInteractionManager.js";
-import TileTypesManager from "../managers/TileTypesManager.js";
-import { MapDataService } from "../services/MapDataService.js";
-import { processBoundingBoxes } from "../services/os.js";
-import { fetchLocation, fetchLatLon } from "../services/os.js";
-import { landUseInfo } from "../services/os.js";
-import { getLocation } from "../services/location.js";
-//import { fetchWeatherAlerts } from "../services/os.js";
-import { preloadAssets } from "../helpers/preloadAssets.js";
-import { createAnimations } from "../helpers/preloadAssets.js";
-import { updateAllRoadPatterns } from "../helpers/connector.js";
-import { updateAllRailPatterns } from "../helpers/connector_rail.js";
-import { findClimateNumber } from "../helpers/tileUtils.js";
-import { applyWaterOnDominantNoDataSide } from "../helpers/tileUtils.js";
-import { fixBeachTileFrames } from "../helpers/tileUtils.js";
+import { processBoundingBoxes } from "../os.js";
+import { fetchLocation, fetchLatLon } from "../os.js";
+import { landUseInfo } from "../os.js";
+//import { fetchWeatherAlerts } from "../os.js";
+import { preloadAssets } from "../preloadAssets.js";
+import { createAnimations } from "../preloadAssets.js";
+import { updateAllRoadPatterns } from "../connector.js";
+import { updateAllRailPatterns } from "../connector_rail.js";
+import { findClimateNumber } from "../tileUtils.js";
+import { applyWaterOnDominantNoDataSide } from "../tileUtils.js";
+import { fixBeachTileFrames } from "../tileUtils.js";
 import { CitySimulation } from "../simulation/CitySimulation.js";
 import { EconomySimulation } from "../simulation/EconomySimulation.js";
 
-console.log('🚀🚀🚀 GameScene.js FILE LOADED - VERSION 2025-FINAL 🚀🚀🚀');
-
-const backendBaseUrl = "http://localhost:8801";
+const backendBaseUrl = "http://localhost:8800";
 
 const spriteWidth = 32;
 const spriteHeight = spriteWidth / 2;
@@ -41,7 +31,7 @@ const gridToTileKey = new Map();
 const city = window.city;
 const state = window.state;
 
-let mapTilesWidth = 31;
+let mapTilesWidth = 30;
 let mapTilesHeight = mapTilesWidth;
 
 const initialGridSize = mapTilesWidth;
@@ -49,7 +39,7 @@ const expandedGridSize = 11;
 
 let isDraggingSprite = false;
 let zoomNow = false;
-// isLoading variable removed - processing animation now in ClimateManager
+let isLoading = true;
 
 let climateNum = 0;
 let climateNumArray = [];
@@ -60,24 +50,17 @@ export class GameScene extends Phaser.Scene {
     constructor() {
         super("playingGame");
         this.gameState = new GameState();
-        this.inputManager = new InputManager(this);
-        this.saveLoadManager = new SaveLoadManager(this);
-        this.rotationHelper = new RotationHelper(this, tileWidth, tileHeight);
-        this.mapDataService = new MapDataService();
-        this.climateManager = new ClimateManager(this);
-        this.tileInteractionManager = new TileInteractionManager(this, gridToTileKey, tileWidth, tileHeight);
-        this.tileTypesManager = new TileTypesManager(this);
         this.getInfo = null;
         this.tileChanges = []; // To store tile modifications
         this.startX = 0;
         this.isFlooding = false;
-        this.startY = -6;
+        this.startY = 0;
         this.mapContainer = null;
         this.tileData = [];
         this.mapTiles = [];
         this.mapTilesPos = [];
         this.mapTilesType = [];
-        // Climate text moved to DOM
+        this.climateText = "";
         this.mapArray = [];
         this.results = [];
         this.spiralState = 0;
@@ -88,34 +71,36 @@ export class GameScene extends Phaser.Scene {
         this.secondLoad = false;
         this.isaReverting = false;
         this.isRotating = false; // Flag to track rotation state
-        this.rotationCount = 0; // Track number of 90° clockwise rotations (0-3)
         this.isLoadingMap = false; // Flag to prevent saveState during map loading
 
-        // Map boundary properties - initialize with large values to allow free movement until boundaries are calculated
+        this.boundMoveMap = this.MoveMap.bind(this);
+        this.boundZoomMap = this.ZoomMap.bind(this);
+        this.boundRotateMap = this.RotateMap.bind(this);
+        this.boundInfoMap = this.InfoMap.bind(this);
+        this.boundDestroy = this.Destroy.bind(this);
+        this.boundPlantTrees = this.PlantTrees.bind(this);
+        this.boundBuildMedium = this.BuildMedium.bind(this);
+        this.boundBuildLarge = this.BuildLarge.bind(this);
+        this.boundBuildRoad = this.BuildRoad.bind(this);
+        this.boundBuildBikeLane = this.BuildBikeLane.bind(this);
+        this.boundBuildWind = this.BuildWind.bind(this);
+        this.boundBuildSolar = this.BuildSolar.bind(this);
+        this.boundGoHome = this.GoHome.bind(this);
+        this.boundUnDo = this.UnDo.bind(this);
+
+        // Map boundary properties
         this.mapBoundaries = {
-            minX: -10000,
-            maxX: 10000,
-            minY: -10000,
-            maxY: 10000
+            minX: 0,
+            maxX: 0,
+            minY: 0,
+            maxY: 0
         };
 
-        // Rotation origin - will be set to the center tile's position
-        this.rotationOriginX = null;
-        this.rotationOriginY = null;
+        // this.applyPatternAction = this.applyPatternAction.bind(this);
 
-        // Backward compatibility aliases for history (delegate to SaveLoadManager)
-        Object.defineProperty(this, '_history', {
-            get: () => this.saveLoadManager.history,
-            set: (val) => { this.saveLoadManager.history = val; }
-        });
-        Object.defineProperty(this, '_historyMax', {
-            get: () => this.saveLoadManager.historyMax,
-            set: (val) => { this.saveLoadManager.historyMax = val; }
-        });
-        Object.defineProperty(this, '_redo', {
-            get: () => this.saveLoadManager.redoStack,
-            set: (val) => { this.saveLoadManager.redoStack = val; }
-        });
+        this._history = [];   // array of snapshots
+        this._historyMax = 21; // keep at most 10 (allows 5 undo operations after 3 initial snapshots)
+        this._redo = [];   // stack for redo snapshots
     }
 
     preload() {
@@ -123,15 +108,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     async create(data) {
-        console.log('🎮 GameScene.create() START');
-        console.log('🎮 Data parameter:', data);
-        console.log('🎮 Data type:', typeof data);
-        console.log('🎮 Data.resume?:', data && data.resume);
-
         this.emitter = EventDispatcher.getInstance();
-
-        // Initialize HTML controls (connects HTML/CSS buttons to event system)
-        this.htmlControls = new HTMLControls(this.emitter);
 
         this.mapTiles = [];
         this.mapTilesPos = [];
@@ -151,7 +128,7 @@ export class GameScene extends Phaser.Scene {
         //MAIN CAMERA:
 
         const camGame = this.cameras.main;
-        camGame.setZoom(8);
+        camGame.setZoom(4);
         camGame.setBounds(0, 0, gWidth, gHeight);
 
         //BACKGROUND:
@@ -161,119 +138,80 @@ export class GameScene extends Phaser.Scene {
         });
         const Background = new Phaser.Geom.Rectangle(0, 0, 1000, 550);
         this.bkgd = this.add.image(500, 300, "background_image");
-        this.bkgd.setScale(0.5); // Scale 0.5 for initial zoom 8 (zoom 4 = scale 1, zoom 8 = scale 0.5)
+        this.bkgd.setScale(1);
         this.bkgd.setTint(0x4e2e22);
         this.backgroundImage = this.bkgd;
         this.bkgdProcessing = this.add.image(500, 300, "background_image");
         this.bkgdProcessing.setScale(4);
         this.bkgdProcessing.setTint(0x4e2e22);
         this.BackgroundColor.fillRectShape(Background);
-
-        // Show navigation after background is set up
-        if (window.showNavigation) {
-            window.showNavigation();
-        }
+        this.GameBarColor = this.add.graphics().fillStyle(0x000000, 0.25);
+        const GameBar = new Phaser.Geom.Rectangle(0, 550, gWidth, gHeight);
+        this.GameBarColor.fillRectShape(GameBar);
 
         //LOADING:
 
-        this.textLoad = this.add.text(30, 30, "", {
+        const textLoad = this.add.text(30, 30, "", {
             color: "#ff6633",
         });
-        this.textLoad.setOrigin(0, 0);
+        textLoad.setOrigin(0, 0);
 
-        camGame.ignore(this.textLoad);
+        camGame.ignore(textLoad);
+        const camProcessing = this.cameras.add(0, 0, 300, 100);
+        camProcessing.setZoom(1);
+        camProcessing.ignore(this.bkgd);
 
         camGame.ignore(this.bkgdProcessing);
 
-        // Processing map animation removed - now handled by ClimateManager when score is 0
+        //const textIterations = [
+        //    "awaiting OpenStreetMap",
+        //    "awaiting OpenStreetMap.",
+        //    "awaiting OpenStreetMap..",
+        //    "awaiting OpenStreetMap...",
+        //];
+        const textIterations = [
+            "processing map",
+            "processing map.",
+            "processing map..",
+            "processing map...",
+        ];
+        let index = 0;
+
+        //set and clear loading text
+        let intervalId = setInterval(() => {
+            if (isLoading == false) {
+                clearInterval(intervalId);
+                console.log("Interval cleared!");
+            } else {
+                textLoad.text = textIterations[index];
+                index = (index + 1) % textIterations.length; // Reset index to 0 when it reaches the end
+            }
+        }, 1000);
+
+        this.GameBarColor.fillRectShape(GameBar);
 
         //animations
-        try {
-            createAnimations(this);
-        } catch (error) {
-            console.error('⚠️ Error creating animations:', error);
-            // Continue anyway - animations are not critical for resume
-        }
+        createAnimations(this);
 
-        // Get reference to DOM element for info text (tool/mode display)
-        this.infoTextElement = document.getElementById('land-use-info');
-
-        // Initialize ClimateManager (now uses DOM element)
-        this.climateManager.initialize(this.emitter);
+        this.getInfo = this.add
+            .text(30, 568, "", {
+                color: "#00FF00",
+            })
+        //.setShadow(1, 1, "#ff9933", 3, false, true);
 
         // CREATE MAP:
 
         this.mapContainer = this.add.container(0, 0);
         this.mapContainer.sort("y");
 
-        ///UISCENE - CREATE BEFORE LOADING MAP, HIDDEN UNTIL FIRST TILE APPEARS
-        this.UIScene = new UIScene({ scene: this });
-        this.UIScene.camUI.setVisible(false); // Keep hidden - using HTML/CSS buttons instead
-        this.UIScene.camUI.ignore([
-            this.bkgd,
-            this.bkgdProcessing,
-            this.BackgroundColor
-        ]);
-
-        // Setup camera ignores immediately so UI is visible during streaming
-        camGame.ignore(this.UIScene.buttons);
-
-        // Initialize input manager so UI buttons are interactive during streaming
-        this.inputManager.initialize(this.emitter);
-
-        // ============================================
-        // SET UP GLOBAL INPUT HANDLERS EARLY
-        // ============================================
-        // These must be set up BEFORE tiles are created/made interactive
-
-        this.input.on("pointerdown", function (pointer) {
-            console.log('🖱️ Scene pointerdown fired!');
-            const isUIClick = this.isPointerOverUI(pointer);
-            console.log(`   isDraggingSprite: ${isDraggingSprite}, moveBool: ${this.gameState.moveBool}, isUIClick: ${isUIClick}`);
-
-            // Move mode is arrow-key only - don't respond to pointer
-            // Just update info text
-
-            // Update info text with current tool/mode (if NOT clicking on UI buttons)
-            if (!isUIClick && this.infoTextElement) {
-                const infoText = this.gameState.getInfoText();
-                if (infoText) {
-                    this.infoTextElement.textContent = infoText;
-                    this.infoTextElement.classList.add('show');
-                } else {
-                    this.infoTextElement.textContent = '';
-                    this.infoTextElement.classList.remove('show');
-                }
-            }
-        }, this);
-
-        this.input.on("pointerup", function () {
-            if (this.tempSprite) {
-                // to stop dragging the sprite as well
-                isDraggingSprite = false;
-            }
-        }, this);
-
-        console.log('✅ Input handlers set up');
-
-        // Check if this is a resume or new game
-        if (data && data.resume) {
-            console.log('💾 RESUME: data.resume is true - calling loadMap()');
-            try {
+        try {
+            if (data && data.resume) {
                 await this.loadMap();
-            } catch (error) {
-                console.error("❌ ERROR loading saved map:", error);
-                console.error(error.stack);
-            }
-        } else {
-            // Start new game
-            console.log('🆕 NEW GAME: Starting new game');
-            try {
+            } else {
                 await this.startNewGame(boxSize, mapTilesWidth, mapTilesHeight);
-            } catch (error) {
-                console.error("❌ ERROR in create method:", error);
-                console.error(error.stack);
             }
+        } catch (error) {
+            console.error("Error fetching land use data:", error);
         }
         //// line for proper tile placement
         this.mapContainer.sort("y");
@@ -281,10 +219,7 @@ export class GameScene extends Phaser.Scene {
         let mapX = gWidth / 2 + mapTilesWidth * factor;
         let mapY = gHeight / 2;
 
-        // Clean up loading text if it still exists (may have been destroyed earlier)
-        if (this.textLoad && this.textLoad.active) {
-            this.textLoad.destroy();
-        }
+        textLoad.destroy();
         isLoading = false;
 
         //change starting camera zoom
@@ -316,8 +251,17 @@ export class GameScene extends Phaser.Scene {
         // (see TileArrayTempate.png for tile numbers)
         this.addTileListeners();
 
-        ///UISCENE (already created before map loading - line 210)
-        // this.inputManager.initialize(this.emitter); // Already done at line 223
+        ///UISCENE
+
+        this.UIScene = new UIScene({ scene: this });
+        this.UIScene.camUI.ignore([
+            this.bkgd,
+            this.bkgdProcessing,
+            this.BackgroundColor,
+            this.GameBarColor
+        ]);
+
+        this.setListeners();
 
         if (this.buildingDropdown) {
             this.add.existing(this.buildingDropdown);
@@ -332,13 +276,118 @@ export class GameScene extends Phaser.Scene {
             this.startRandomTornado(30, 150);
         });
 
+        const camInfo = this.cameras.add(0, 550, gWidth, gHeight);
+        camInfo.setOrigin(0, 550);
+        camInfo.scrollY = 550;
+        camInfo.setZoom(1);
+        camInfo.setBackgroundColor(0x00000);
+
+        camGame.ignore(this.UIScene.buttons);
+
+        camInfo.ignore(this.UIScene.buttons);
+        camInfo.ignore(this.mapContainer);
+        camInfo.ignore(Background);
+
+        camProcessing.ignore(this.UIScene.buttons);
+        camProcessing.ignore(this.mapContainer);
+        camProcessing.ignore(Background);
+
+        this.cameras.remove(camProcessing);
+
+        this.input.on("pointerdown", function (pointer) {
+            const isUIClick = this.isPointerOverUI(pointer);
+
+            // Enable dragging if in move mode (but not on UI)
+            if (!isDraggingSprite && this.gameState.moveBool && !isUIClick) {
+                this.dragStartX = pointer.x - this.mapContainer.x;
+                this.dragStartY = pointer.y - this.mapContainer.y;
+                this.isDragging = true;
+            }
+
+            // Only update info text if NOT clicking on UI buttons
+            if (!isUIClick) {
+                this.getInfo.text = this.gameState.getInfoText();
+            }
+
+            // Show land use info on click (only if clicking on game area, not UI)
+            if (!isUIClick) {
+                const tileKeyDown = gridToTileKey.get(`${this.gridX}_${this.gridY}`);
+                const landUseDataDown = landUseInfo.get(tileKeyDown);
+                if (landUseDataDown && landUseDataDown.maxAreaType) {
+                    this.landUseText.text = 'Land Use: ' + landUseDataDown.maxAreaType;
+                } else {
+                    this.landUseText.text = '';
+                }
+            }
+        }, this);
+
+        this.input.on(
+            "pointermove",
+            function (pointer) {
+                if (this.isDragging && !isDraggingSprite) {
+                    // Calculate proposed new position
+                    const newX = pointer.x - this.dragStartX;
+                    const newY = pointer.y - this.dragStartY;
+
+                    // Apply boundary constraints to keep map on screen
+                    const constrainedX = Math.max(this.mapBoundaries.minX, Math.min(this.mapBoundaries.maxX, newX));
+                    const constrainedY = Math.max(this.mapBoundaries.minY, Math.min(this.mapBoundaries.maxY, newY));
+
+                    this.mapContainer.x = constrainedX;
+                    this.mapContainer.y = constrainedY;
+                }
+            },
+            this
+        );
+
+        this.input.on(
+            "pointerup",
+            function () {
+                this.isDragging = false;
+
+                if (this.tempSprite) {
+                    // to stop dragging the sprite as well
+                    isDraggingSprite = false;
+                }
+            },
+            this
+        );
+
         // ============================================
         // KEYBOARD INPUTS
         // ============================================
-        // Note: All keyboard shortcuts (including arrow keys) are now handled by InputManager
-        // setupKeyboardShortcuts() which is called during inputManager.initialize()
 
+        // Register all keys
+        const z = this.input.keyboard.addKey("Z");
+        const leftArrow = this.input.keyboard.addKey("LEFT");
+        const rightArrow = this.input.keyboard.addKey("RIGHT");
+        const upArrow = this.input.keyboard.addKey("UP");
+        const downArrow = this.input.keyboard.addKey("DOWN");
+        const f = this.input.keyboard.addKey("F");
+        const r = this.input.keyboard.addKey("R");
         const o = this.input.keyboard.addKey("O");
+        const shift = this.input.keyboard.addKey("SHIFT");
+
+        z.on("down", () => {
+            this.ZoomMap();
+        });
+
+        shift.on("down", () => {
+            this.gameState.moveBool = true;
+        });
+
+        shift.on("up", () => {
+            this.gameState.moveBool = false;
+        });
+
+        f.on("up", () => {
+            this.mapContainer.x = 0;
+            this.mapContainer.y = 0;
+        });
+
+        r.on("up", () => {
+            this.rotateMapClockwise();
+        });
 
         o.on("up", () => {
             if (window.toggleFullscreen) {
@@ -395,45 +444,16 @@ export class GameScene extends Phaser.Scene {
         // UI TEXT ELEMENTS (Responsive Positioning)
         // ============================================
 
-        // Land use info text already created early (line 205) so it exists when tiles become interactive
+        // Land use info text - bottom left
+
+        this.landUseText = this.add.text(30, gHeight - 70, '', {
+            color: '#00FF00',
+            fontSize: '16px',
+        });
+        camGame.ignore(this.landUseText);
     }
 
     async startNewGame(boxSize, mapTilesWidth, mapTilesHeight) {
-        const latlon = getLocation();
-        const { lat, lon } = latlon;
-
-        // =====================================================
-        // STEP 1: Check crowd-sourced database
-        // =====================================================
-        const dbMapData = await this.mapDataService.checkDatabaseForMap(lat, lon);
-
-        if (dbMapData) {
-            // Map found in database - load instantly!
-            await this.loadMapFromDatabase(dbMapData);
-            return;
-        }
-
-        // =====================================================
-        // STEP 1.5: Check saved maps database (backend)
-        // =====================================================
-        try {
-            const response = await fetch(`${backendBaseUrl}/api/saved-maps/check`);
-            if (response.ok) {
-                const result = await response.json();
-                if (result.exists && result.mapData) {
-                    console.log('💾 Found saved map in backend database - loading...');
-                    await this.loadMap();
-                    return;
-                }
-            }
-        } catch (error) {
-            console.log('ℹ️ No saved map found in backend database:', error.message);
-            // Continue to OSM fetch
-        }
-
-        // =====================================================
-        // STEP 2: Not in database - fetch from OpenStreetMap
-        // =====================================================
         await this.fetchLocationAndBoundingBoxes(
             boxSize,
             mapTilesWidth,
@@ -458,61 +478,58 @@ export class GameScene extends Phaser.Scene {
         const existingChange = this.tileChanges.find((tile) => tile.id === id);
         let finalTileType = existingChange ? existingChange.newTileType : tileType;
 
-        // Debug: Log when we find a tileChange
-        if (existingChange) {
-            console.log(`🔄 Applying tileChange: ID ${id} changed from "${tileType}" to "${finalTileType}"`);
-        }
-
         this.tileData.push({ box, finalTileType });
 
-        // 🆕 FIND EXISTING TILE by ID (instead of creating new one)
-        // Tile IDs are based on lat/lon and don't change with rotation,
-        // so we can match directly by ID regardless of rotation state
+        // ✨ SIMPLIFIED ISOMETRIC CONVERSION
+        // Standard isometric formulas - much cleaner!
+        let isoX = this.startX + (x - y) * (tileWidth / 2);
+        let isoY = this.startY + (x + y) * (tileHeight / 2);
 
-        const existingTileIndex = this.mapTiles.findIndex(t => t.id === id);
+        // Create the sprite
+        let tile = this.add.sprite(isoX, isoY, finalTileType);
+        let tilePosStr = isoX + ", " + isoY;
+        tile.setScale(setScale);
 
-        if (existingTileIndex !== -1) {
-            // Update existing null tile with real data
-            const tile = this.mapTiles[existingTileIndex];
-
-            // Update texture
-            tile.setTexture(finalTileType);
-
-            // Update origin for special tiles
-            if (finalTileType === "green_apartments") {
-                console.log(`🏢 Setting medium tile origin for tile ID ${id} at position (${tile.x}, ${tile.y})`);
-                tile.setOrigin(0.25, 0.47);
-            } else {
-                tile.setOrigin(0.5, 0.5);
-            }
-
-            // Play animation
-            if (this.anims.exists(finalTileType)) {
-                tile.play({ key: finalTileType, randomFrame: true });
-            }
-
-            // Make interactive if not already
-            if (!tile.input) {
-                tile.setInteractive({
-                    pixelPerfect: true,
-                    alphaTolerance: 1,
-                });
-            }
-
-            // Mark as no longer null
-            tile.isNullTile = false;
-
-            // Update mapTilesType array
-            this.mapTilesType[existingTileIndex] = finalTileType;
-
-            updateAllRoadPatterns(this);
-            updateAllRailPatterns(this);
+        if (finalTileType === "green_apartments") {
+            tile.setOrigin(0.25, 0.47);
         } else {
-            // Tile not found - shouldn't happen with pre-created grid
-            console.warn(`⚠️ Tile ID ${id} not found in pre-created grid`);
-            console.warn(`   Coords: (${x},${y}), Rotation: ${this.rotationCount}`);
-            console.warn(`   Skipping tile to prevent duplicates`);
+            tile.setOrigin(0.5, 0.5);
         }
+
+        tile.smoothed = false;
+        tile.play({ key: finalTileType, randomFrame: true });
+
+        tile.setInteractive({
+            pixelPerfect: true,
+            alphaTolerance: 1,
+        });
+
+        // Store grid coordinates and ID
+        tile.id = id;
+        tile.gridX = x;
+        tile.gridY = y;
+
+        // Handle tileKey for land use info
+        let tileKey;
+        if (typeof box.minLat === "number" && typeof box.minLon === "number") {
+            tileKey = `${box.minLat.toFixed(6)}_${box.minLon.toFixed(6)}`;
+        } else if (box.id !== undefined) {
+            const parts = box.id.split("_");
+            tileKey = parts.length >= 2 ? `${parts[0]}_${parts[1]}` : box.id;
+        } else {
+            tileKey = `${x}_${y}`;
+        }
+
+        gridToTileKey.set(`${x}_${y}`, tileKey);
+
+        // Add to container and arrays
+        this.mapContainer.add(tile);
+        this.mapTiles.push(tile);
+        this.mapTilesPos.push(tilePosStr);
+        this.mapTilesType.push(finalTileType);
+
+        updateAllRoadPatterns(this);
+        updateAllRailPatterns(this);
     }
 
     async fetchLocationAndBoundingBoxes(boxSize, mapTilesWidth, mapTilesHeight) {
@@ -525,39 +542,33 @@ export class GameScene extends Phaser.Scene {
         this.minLat = parseFloat(locationData.minLat);
         this.minLon = parseFloat(locationData.minLon);
 
-        // Grid-align coordinates (same as os.js processBoundingBoxes does)
-        const gridLat = Math.round(this.minLat / boxSize) * boxSize;
-        const gridLon = Math.round(this.minLon / boxSize) * boxSize;
+        console.log("Using coordinates:", this.minLat, this.minLon);
 
         const initialBox = {
-            minLat: parseFloat(gridLat.toFixed(6)),
-            minLon: parseFloat(gridLon.toFixed(6)),
-            maxLat: parseFloat((gridLat + boxSize).toFixed(6)),
-            maxLon: parseFloat((gridLon + boxSize).toFixed(6)),
+            minLat: this.minLat,
+            minLon: this.minLon,
+            maxLat: this.minLat + boxSize,
+            maxLon: this.minLon + boxSize,
         };
 
         // 🆕 Pre-check if location is in database
         let inDatabase = false;
         try {
-            const response = await fetch(`${backendBaseUrl}/closestBbox?lat=${this.minLat}&lon=${this.minLon}`);
+            const testBox = await fetch(`${backendBaseUrl}/closestBbox?lat=${this.minLat}&lon=${this.minLon}`)
+                .then(r => r.json());
 
-            if (!response.ok) {
-                inDatabase = false;
-            } else {
-                const testBox = await response.json();
+            if (testBox && testBox.length > 0) {
+                const distance = Math.sqrt(
+                    Math.pow(testBox[0].minLat - this.minLat, 2) +
+                    Math.pow(testBox[0].minLon - this.minLon, 2)
+                );
 
-                if (testBox && testBox.length > 0) {
-                    const distance = Math.sqrt(
-                        Math.pow(testBox[0].minLat - this.minLat, 2) +
-                        Math.pow(testBox[0].minLon - this.minLon, 2)
-                    );
-
-                    // If match is within reasonable distance (0.1 degrees ≈ 11km)
-                    inDatabase = distance < 0.01;
-                }
+                // If match is within reasonable distance (0.1 degrees ≈ 11km)
+                inDatabase = distance < 0.01;
+                console.log(`Database check: ${inDatabase ? 'IN' : 'NOT IN'} database (distance: ${distance.toFixed(4)})`);
             }
         } catch (error) {
-            inDatabase = false;
+            console.warn("Database check failed:", error);
         }
 
         // 🆕 Adjust grid size based on database availability
@@ -567,11 +578,13 @@ export class GameScene extends Phaser.Scene {
         if (!inDatabase) {
             adjustedWidth = 10;  // Use 10x10 for Overpass
             adjustedHeight = 10;
+            console.warn(`⚠️ Location not in database. Using ${adjustedWidth}x${adjustedHeight} grid for Overpass API.`);
+            console.warn(`⚠️ This will take approximately ${Math.round((adjustedWidth * adjustedHeight) / 60)} minutes.`);
+        } else {
+            console.log(`✅ Location in database. Using ${adjustedWidth}x${adjustedHeight} grid.`);
         }
 
-        // Store grid dimensions for features like rotation during streaming
-        this.gridWidth = adjustedWidth;
-        this.gridHeight = adjustedHeight;
+        console.log(`🔍 Calling renderGridInSpiral with: ${adjustedWidth}x${adjustedHeight}`);
 
         this.mainArray = await this.renderGridInSpiral(
             initialBox,
@@ -610,146 +623,35 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    /**
-     * Calculate the starting position (anchor point) for the isometric grid
-     * This ensures consistent positioning across all grid creation/loading functions
-     * @param {number} gridHeight - Height of the grid in tiles
-     * @returns {object} Object with startX and startY properties
-     */
-    calculateGridStart(gridHeight) {
+    async renderGridInSpiral(initialBox, gridWidth, gridHeight, boxSize) {
         const gWidth = this.sys.game.canvas.width;
         const gHeight = this.sys.game.canvas.height;
-        const isoGridHeight = gridHeight * tileHeight;
-
-        // Account for artwork offset: sprite origin is (0.5, 0.5) but artwork is 8px higher
-        const artworkOffsetY = 8; // spriteHeight / 2
-        const userOffsetY = -6; // User adjustment to shift grid up
-
-        return {
-            startX: gWidth / 2,
-            startY: (gHeight / 2) - (isoGridHeight / 2) + artworkOffsetY + userOffsetY
-        };
-    }
-
-    /**
-     * Pre-create the entire grid with null tiles
-     * This allows rotation and other features to work on a complete grid
-     * Data will stream in and replace null tiles with actual OSM data
-     */
-    createNullGrid(gridWidth, gridHeight, initialBox, boxSize) {
-        try {
-            // Use centralized grid start calculation
-            const gridStart = this.calculateGridStart(gridHeight);
-            this.startX = gridStart.startX;
-            this.startY = gridStart.startY;
-
-            // Use null texture as transparent placeholder
-            const placeholderTexture = "null";
-
-            // Check if texture exists
-            if (!this.textures.exists(placeholderTexture)) {
-                const fallbackTexture = "ground";
-                if (!this.textures.exists(fallbackTexture)) {
-                    console.error(`❌ Neither "${placeholderTexture}" nor "${fallbackTexture}" texture exists! Aborting.`);
-                    return;
-                }
-            }
-
-        // Create all tiles in the grid with placeholder texture
-        for (let y = 0; y < gridHeight; y++) {
-            for (let x = 0; x < gridWidth; x++) {
-                // Calculate isometric position
-                let isoX = this.startX + (x - y) * (tileWidth / 2);
-                let isoY = this.startY + (x + y) * (tileHeight / 2);
-
-                // Create placeholder tile sprite
-                let tile = this.add.sprite(isoX, isoY, placeholderTexture);
-
-                tile.setScale(setScale);
-                tile.setOrigin(0.5, 0.5);
-                tile.smoothed = false;
-
-                // Play animation if it exists
-                if (this.anims.exists(placeholderTexture)) {
-                    tile.play({ key: placeholderTexture, randomFrame: true });
-                }
-
-                // Generate unique ID for this grid position
-                // IMPORTANT: Must match the spiral pattern calculation in os.js generateSpiralBoundingBoxes
-                // Spiral centers the grid by subtracting floor(count/2)
-                const centerOffsetY = Math.floor(gridHeight / 2);
-                const centerOffsetX = Math.floor(gridWidth / 2);
-                const minLat = initialBox.minLat + (y - centerOffsetY) * boxSize;
-                const minLon = initialBox.minLon + (x - centerOffsetX) * boxSize;
-                const maxLat = minLat + boxSize;
-                const maxLon = minLon + boxSize;
-                const id = `${minLat.toFixed(6)}_${minLon.toFixed(6)}_${maxLat.toFixed(6)}_${maxLon.toFixed(6)}`;
-
-                // Store grid coordinates and ID
-                tile.id = id;
-                tile.gridX = x;
-                tile.gridY = y;
-                tile.isNullTile = true; // Mark as placeholder tile
-
-                // Check if this is the center tile (dynamically calculated based on grid size)
-                const centerX = Math.floor(gridWidth / 2);
-                const centerY = Math.floor(gridHeight / 2);
-                if (x === centerX && y === centerY) {
-                    console.warn(`   Center tile (${centerX},${centerY}) ID: ${id}`);
-                    // Store rotation origin as the center tile's position
-                    this.rotationOriginX = isoX;
-                    this.rotationOriginY = isoY;
-                    console.log(`🎯 Rotation origin set to center tile: (${isoX.toFixed(1)}, ${isoY.toFixed(1)})`);
-                }
-
-                // Store tileKey for land use lookups
-                const tileKey = `${minLat.toFixed(6)}_${minLon.toFixed(6)}`;
-                gridToTileKey.set(`${x}_${y}`, tileKey);
-
-                // Add to container and arrays
-                this.mapContainer.add(tile);
-                this.mapTiles.push(tile);
-                this.mapTilesPos.push(`${isoX}, ${isoY}`);
-                this.mapTilesType.push(placeholderTexture);
-            }
-        }
-
-        } catch (error) {
-            console.error(`❌ Error in createNullGrid:`, error);
-            console.error(error.stack);
-        }
-    }
-
-    async renderGridInSpiral(initialBox, gridWidth, gridHeight, boxSize) {
-        console.log('🚀 renderGridInSpiral STARTED', {gridWidth, gridHeight, boxSize});
 
         // Set grid dimensions first
         mapTilesWidth = gridWidth;
         mapTilesHeight = gridHeight;
 
-        // Use centralized grid start calculation
-        const gridStart = this.calculateGridStart(gridHeight);
-        this.startX = gridStart.startX;
-        this.startY = gridStart.startY;
+        const isoGridHeight = gridHeight * tileHeight;
+        const verticalOffset = -5; // Negative moves UP, positive moves DOWN
 
-        // 🏗️ PRE-CREATE FULL GRID WITH NULL TILES
-        this.createNullGrid(gridWidth, gridHeight, initialBox, boxSize);
+        this.startX = gWidth / 2;
+        this.startY = (gHeight / 2) - (isoGridHeight / 2) + verticalOffset;
 
         const tileData = [];
+        const pseudoTiles = [];
         const tileTypesArray = [];
-        let tilesRendered = 0;
-        let listenersActivated = false;
-        const EARLY_ACTIVATION_THRESHOLD = 1; // Enable tile interaction as soon as first tile renders
-        const INCREMENTAL_PROCESSING_INTERVAL = 75;
 
-        // 🌊 Process the generator and render tiles AS THEY ARRIVE
+        // Process the generator - don't destructure yet
         for await (const result of processBoundingBoxes(
             initialBox,
             gridWidth,
             gridHeight
         )) {
+            console.log("Received result:", result);
+
             // Skip metadata yield (first result)
             if (result.mode) {
+                console.log(`Loading mode: ${result.mode}, tiles: ${result.totalTiles}`);
 
                 // Update loading text if using Overpass
                 if (result.useOverpass && this.loadingText) {
@@ -757,161 +659,86 @@ export class GameScene extends Phaser.Scene {
                     this.loadingText.setText(
                         `Loading from OpenStreetMap\n` +
                         `This may take ~${estimatedMinutes} minutes\n` +
-                        `Streaming tiles as they arrive...`
+                        `Processing...`
                     );
                 }
-                continue;
+                continue; // Skip to next yield
             }
 
-            // Destructure tile data
+            // Now destructure tile data
             const { tileType, box } = result;
 
             if (!box) {
+                console.warn("Received result without box:", result);
                 continue;
             }
 
-            // 🎮 RENDER IMMEDIATELY as data arrives from OSM!
-            this.layTilesOnPlayboard(tileType, box.x, box.y, box);
-            this.mapContainer.sort("y");
-
-            tileData.push({ box, tileType });
-            tileTypesArray.push({
-                x: box.x,
-                y: box.y,
-                type: tileType,
+            pseudoTiles.push({
+                gridX: box.x,
+                gridY: box.y,
+                texture: { key: tileType },
+                box: box,
             });
+            tileData.push({ box, tileType });
+        }
 
-            tilesRendered++;
+        applyWaterOnDominantNoDataSide(this, pseudoTiles);
 
-            // 🎮 Add listeners to newly rendered tiles during streaming
-            if (!listenersActivated && tilesRendered >= EARLY_ACTIVATION_THRESHOLD) {
-                // First time: set up ALL tiles rendered so far
+        let index = 0;
+        const renderNext = () => {
+            if (index >= pseudoTiles.length) {
                 this.addTileListeners();
-                listenersActivated = true;
-
-                // Show navigation as soon as first tiles are rendered
-                console.log('🎮 First tiles rendered - showing navigation');
-                if (window.showNavigation) {
-                    console.log('✅ Calling window.showNavigation() early');
-                    window.showNavigation();
-                } else {
-                    console.error('❌ window.showNavigation not found!');
-                }
-
-                // Processing map text removed - no longer used
-
-                // HTML/CSS buttons now used instead of Phaser UIScene
-                // (Phaser UI kept hidden - see line 250)
-
-                // Update climate score immediately when first tile appears
-                this.climateManager.recalculateScore();
-
-                // Initialize TileTypesManager for base hover interactions
-                this.tileTypesManager.initialize();
-            } else if (listenersActivated) {
-                // After activation: add listener to just the newest tile
-                const newestTile = this.mapTiles[this.mapTiles.length - 1];
-                if (newestTile) {
-                    this.addListenerToTile(newestTile);
-                }
-
-                // Update climate score every tile during streaming to see it change in real-time
-                this.climateManager.recalculateScore();
-            }
-
-            // 🔄 Incremental processing every N tiles
-            if (tilesRendered % INCREMENTAL_PROCESSING_INTERVAL === 0) {
                 updateAllRoadPatterns(this);
                 updateAllRailPatterns(this);
+                fixBeachTileFrames(this);
+                this.filterNonAdjacentBeaches();
+                this.updateClimateScore();
+                this.calculateMapBoundaries();
 
-                // Yield control back to Phaser for UI updates
-                await new Promise(resolve => setTimeout(resolve, 0));
-            }
-
-            // Yield control periodically to allow UI updates
-            if (tilesRendered % 5 === 0) {
-                await new Promise(resolve => setTimeout(resolve, 0));
-            }
-        }
-
-        // 🏁 Final processing pass after ALL tiles loaded
-        // Mark loading as complete
-        this.gameState.isLoading = false;
-        isLoading = false;
-
-        console.log('🎮 renderGridInSpiral complete - about to show navigation');
-        // Show navigation now that game scene is loaded
-        if (window.showNavigation) {
-            console.log('✅ Calling window.showNavigation()');
-            window.showNavigation();
-        } else {
-            console.error('❌ window.showNavigation not found!');
-        }
-
-        updateAllRoadPatterns(this);
-        updateAllRailPatterns(this);
-        fixBeachTileFrames(this);
-        this.filterNonAdjacentBeaches();
-        this.climateManager.recalculateScore();
-        this.calculateMapBoundaries();
-
-        // Map the tileData to simplified format
-        // IMPORTANT: Use gridX/gridY from the actual tile sprites, NOT box.x/box.y from spiral
-        // The spiral algorithm can produce coordinates outside grid bounds (e.g., x=30 for 30x30 grid)
-        const simplifiedTileData = tileData.map(({ box, tileType }) => {
-            // Find the actual tile sprite by ID to get correct grid coordinates
-            const tile = this.mapTiles.find(t => t.id === box.id);
-            if (!tile) {
-                console.warn(`⚠️ Tile not found when saving: ${box.id}`);
-                return {
+                const simplifiedTileData = tileData.map(({ box, tileType }) => ({
                     x: box.x,
                     y: box.y,
                     id: box.id,
                     tileType: tileType,
-                };
+                }));
+
+                localStorage.setItem(
+                    "savedMap",
+                    JSON.stringify({
+                        tiles: simplifiedTileData,
+                        gridWidth: gridWidth,
+                        gridHeight: gridHeight,
+                        tileChanges: this.tileChanges,
+                        landUseInfo: Object.fromEntries(landUseInfo.entries()),
+                    })
+                );
+                return;
             }
 
-            return {
-                x: tile.gridX,  // Use actual grid coordinate (0-29 for 30x30 grid)
-                y: tile.gridY,  // Use actual grid coordinate (0-29 for 30x30 grid)
-                id: box.id,
-                tileType: tileType,
-            };
-        });
+            const tile = pseudoTiles[index];
+            this.layTilesOnPlayboard(
+                tile.texture.key,
+                tile.gridX,
+                tile.gridY,
+                tile.box
+            );
+            this.mapContainer.sort("y");
 
-        const mapData = {
-            tiles: simplifiedTileData,
-            gridWidth: gridWidth,
-            gridHeight: gridHeight,
-            tileChanges: [],
-            landUseInfo: Object.fromEntries(landUseInfo.entries()),
+            if (index % 10 === 0) {
+                this.updateClimateScore();
+            }
+
+            tileTypesArray.push({
+                x: tile.gridX,
+                y: tile.gridY,
+                type: tile.texture.key,
+            });
+            index++;
+
+            setTimeout(renderNext, 10);
         };
 
-        // Save as original map (only if it doesn't exist yet)
-        if (!localStorage.getItem("originalMap")) {
-            localStorage.setItem("originalMap", JSON.stringify(mapData));
-            console.log("Original map saved to localStorage");
-        }
-
-        // Save to localStorage (with player's changes)
-        const mapDataForStorage = {
-            tiles: simplifiedTileData,
-            gridWidth: gridWidth,
-            gridHeight: gridHeight,
-            tileChanges: this.tileChanges,
-            landUseInfo: Object.fromEntries(landUseInfo.entries()),
-        };
-
-        localStorage.setItem("savedMap", JSON.stringify(mapDataForStorage));
-
-        // =====================================================
-        // Save to crowd-sourced database for future players!
-        // =====================================================
-        const latlon = getLocation();
-        const { lat, lon } = latlon;
-
-        this.mapDataService.saveMapToDatabase(lat, lon, mapData);
-
+        renderNext();
         return tileTypesArray;
     }
 
@@ -969,8 +796,12 @@ export class GameScene extends Phaser.Scene {
             } else {
                 tornadoSprite.destroy(); // Remove sprite after animation
 
-                // Tornado animation complete
-                console.log('🌪️ Tornado has finished its path');
+                // Notify player with a newspaper popup
+                this.showNewspaper('Tornado Strikes!', [
+                    'A violent tornado has torn through the region,',
+                    'leaving a trail of destroyed tiles in its wake.',
+                    'Rebuild quickly to restore your city!'
+                ]);
             }
         };
 
@@ -989,13 +820,8 @@ export class GameScene extends Phaser.Scene {
     calculateMapBoundaries() {
         if (this.mapTiles.length === 0) return;
 
-        const cam = this.cameras.main;
         const gWidth = this.sys.game.canvas.width;
         const gHeight = this.sys.game.canvas.height;
-
-        // Calculate world size based on camera zoom
-        const worldWidth = gWidth / cam.zoom;
-        const worldHeight = gHeight / cam.zoom;
 
         // Find the bounding box of all tiles
         let minTileX = Infinity, maxTileX = -Infinity;
@@ -1016,29 +842,15 @@ export class GameScene extends Phaser.Scene {
         const mapWidth = maxTileX - minTileX + tileWidth;
         const mapHeight = maxTileY - minTileY + tileHeight;
 
-        // Use very generous fixed boundaries that allow free panning
-        // As the map grows, we keep these boundaries very permissive
-        // The key is: these values should ONLY get bigger, never smaller
-        const generousBoundary = 5000; // Very generous boundary for free panning
+        // Calculate boundaries to keep at least 30% of map visible
+        const minVisibleWidth = mapWidth * 0.45;
+        const minVisibleHeight = mapHeight * 0.45;
 
-        // Only update boundaries if the new values are MORE permissive than current
-        const newMinX = -Math.max(mapWidth * 2, generousBoundary);
-        const newMaxX = Math.max(worldWidth + mapWidth * 2, generousBoundary);
-        const newMinY = -Math.max(mapHeight * 2, generousBoundary);
-        const newMaxY = Math.max(worldHeight + mapHeight * 2, generousBoundary);
-
-        // Make boundaries MORE permissive as map grows (never more restrictive)
-        this.mapBoundaries.minX = Math.min(this.mapBoundaries.minX, newMinX);
-        this.mapBoundaries.maxX = Math.max(this.mapBoundaries.maxX, newMaxX);
-        this.mapBoundaries.minY = Math.min(this.mapBoundaries.minY, newMinY);
-        this.mapBoundaries.maxY = Math.max(this.mapBoundaries.maxY, newMaxY);
-
-        console.log(`📐 Boundary calculation:
-    World: ${worldWidth.toFixed(0)}x${worldHeight.toFixed(0)}
-    Map: ${mapWidth.toFixed(0)}x${mapHeight.toFixed(0)}
-    Tile range X: ${minTileX.toFixed(0)} to ${maxTileX.toFixed(0)}
-    Tile range Y: ${minTileY.toFixed(0)} to ${maxTileY.toFixed(0)}
-    Boundaries: X(${this.mapBoundaries.minX.toFixed(0)} to ${this.mapBoundaries.maxX.toFixed(0)}), Y(${this.mapBoundaries.minY.toFixed(0)} to ${this.mapBoundaries.maxY.toFixed(0)})`);
+        // Set boundaries so map can't go completely off-screen
+        this.mapBoundaries.minX = -(mapWidth - minVisibleWidth);
+        this.mapBoundaries.maxX = mapWidth - minVisibleWidth;
+        this.mapBoundaries.minY = -(mapHeight - minVisibleHeight);
+        this.mapBoundaries.maxY = mapHeight - minVisibleHeight;
     }
 
     sortArrayLinearly(array) {
@@ -1052,17 +864,18 @@ export class GameScene extends Phaser.Scene {
 
     async loadMap() {
         this.isLoadingMap = true;
-        console.log("🗺️ loadMap() called - Resuming saved game...");
-        console.log("🗺️ All localStorage keys:", Object.keys(localStorage));
+        console.log("Resuming saved game...");
 
         const savedMapString = localStorage.getItem("savedMap");
-        console.log("🗺️ savedMapString exists?:", savedMapString ? 'YES' : 'NO');
-        console.log("🗺️ savedMapString length:", savedMapString ? savedMapString.length : 0);
+        //console.log("Raw savedMapString from localStorage:", savedMapString);
 
-        // Use centralized grid start calculation
-        const gridStart = this.calculateGridStart(mapTilesHeight);
-        this.startX = gridStart.startX;
-        this.startY = gridStart.startY;
+        const gWidth = this.sys.game.canvas.width;
+        const gHeight = this.sys.game.canvas.height;
+        const isoGridHeight = mapTilesHeight * tileHeight;
+        const verticalOffset = -5; // Same value as renderGridInSpiral
+
+        this.startX = gWidth / 2;
+        this.startY = (gHeight / 2) - (isoGridHeight / 2) + verticalOffset;
 
         if (!savedMapString) {
             console.warn("No saved map found. Starting a new game.");
@@ -1082,22 +895,19 @@ export class GameScene extends Phaser.Scene {
                 throw new Error("Loaded map data is invalid or empty.");
             }
 
-            // Restore grid dimensions (both global and scene properties)
+            // Restore grid dimensions
             mapTilesWidth = savedData.gridWidth;
             mapTilesHeight = savedData.gridHeight;
-            this.gridWidth = savedData.gridWidth;
-            this.gridHeight = savedData.gridHeight;
 
-            // Use centralized grid start calculation
-            const gridStart = this.calculateGridStart(mapTilesHeight);
-            this.startX = gridStart.startX;
-            this.startY = gridStart.startY;
+            const gWidth = this.sys.game.canvas.width;
+            const gHeight = this.sys.game.canvas.height;
+            const isoGridHeight = mapTilesHeight * tileHeight;
+
+            this.startX = gWidth / 2;
+        this.startY = (gHeight / 2) - (isoGridHeight / 2) + verticalOffset;
 
             // Restore tileChanges for tracking changes made earlier
             this.tileChanges = savedData.tileChanges || [];
-
-            // Load tile data
-            const tileData = savedData.tiles;
 
             // Restore landUseInfo from localStorage
             if (savedData.landUseInfo) {
@@ -1108,72 +918,19 @@ export class GameScene extends Phaser.Scene {
                 //console.log("Restored landUseInfo:", landUseInfo.size, "entries");
             }
 
+            // Load tile data
+            const tileData = savedData.tiles;
+            //console.log("Loaded tileData from localStorage:", tileData);
+
             // Clear the playboard to prepare for reloading
             this.clearPlayboard();
 
-            // 🏗️ PRE-CREATE NULL GRID (needed for layTilesOnPlayboard to work)
-            // Find the CENTER tile to use as the grid reference point
-            // The center tile's coordinates define the grid's coordinate system
-            if (tileData.length > 0) {
-                const centerX = Math.floor(savedData.gridWidth / 2);
-                const centerY = Math.floor(savedData.gridHeight / 2);
-
-                console.log(`🎯 Looking for center tile at grid position (${centerX}, ${centerY})`);
-
-                // Find the tile at the center grid position
-                const centerTile = tileData.find(t => t.x === centerX && t.y === centerY);
-
-                if (!centerTile) {
-                    console.error(`❌ Center tile not found at (${centerX}, ${centerY})! Using first tile as fallback.`);
-                    // Fallback to first tile
-                    const firstTile = tileData[0];
-                    const [minLat, minLon, maxLat, maxLon] = firstTile.id.split('_').map(parseFloat);
-                    const boxSize = maxLat - minLat;
-                    const initialBox = { minLat, minLon, maxLat, maxLon };
-                    this.createNullGrid(savedData.gridWidth, savedData.gridHeight, initialBox, boxSize);
-                } else {
-                    console.log(`✅ Found center tile: ID ${centerTile.id}`);
-                    const [minLat, minLon, maxLat, maxLon] = centerTile.id.split('_').map(parseFloat);
-                    const boxSize = maxLat - minLat; // Calculate box size from tile ID
-
-                    // The center tile's bounding box IS the initialBox
-                    const initialBox = {
-                        minLat: minLat,
-                        minLon: minLon,
-                        maxLat: maxLat,
-                        maxLon: maxLon
-                    };
-
-                    console.log(`🏗️ Creating null grid for saved map: ${savedData.gridWidth}×${savedData.gridHeight} centered at ${centerTile.id}`);
-                    this.createNullGrid(savedData.gridWidth, savedData.gridHeight, initialBox, boxSize);
-                }
-            }
-
             // Load tiles one by one
             let index = 0;
-            let listenersActivated = false;
-            const EARLY_ACTIVATION_THRESHOLD = 1; // Enable tile interaction immediately
-
             const loadTile = () => {
                 if (index < tileData.length) {
                     const { x, y, tileType, id } = tileData[index];
-
-                    // Debug logging for medium tiles
-                    if (tileType === "green_apartments" || (this.tileChanges && this.tileChanges.find(tc => tc.id === id && tc.newTileType === "green_apartments"))) {
-                        console.log(`🏢 Loading medium tile ${index}: ${tileType} at (${x}, ${y}), id: ${id}`);
-                        const change = this.tileChanges.find(tc => tc.id === id);
-                        if (change) {
-                            console.log(`   Has tileChange: oldType="${tileType}" → newType="${change.newTileType}"`);
-                        }
-
-                        // Find the actual tile in mapTiles to see its current state
-                        const gridTile = this.mapTiles.find(t => t.id === id);
-                        if (gridTile) {
-                            console.log(`   Grid tile found: texture="${gridTile.texture.key}", gridX=${gridTile.gridX}, gridY=${gridTile.gridY}`);
-                        } else {
-                            console.log(`   ⚠️ Grid tile NOT found for ID: ${id}`);
-                        }
-                    }
+                    //console.log(`Laying tile ${index}: ${tileType} at (${x}, ${y})`);
 
                     // Construct a box object with the id
                     const box = { id, x, y };
@@ -1185,21 +942,15 @@ export class GameScene extends Phaser.Scene {
                         this.updateClimateScore();
                     }
 
-                    // 🎮 Enable interaction early - resume saved game
-                    if (!listenersActivated && index >= EARLY_ACTIVATION_THRESHOLD) {
-                        this.addTileListeners();
-                        listenersActivated = true;
-                        console.log(`🎮 Map is now interactive! (${index}/${tileData.length} tiles loaded from save)`);
-                    }
-
                     index++;
                     setTimeout(loadTile, 0); // Load next tile after 0ms
                 } else {
                     // Ensure tiles are sorted correctly for rendering
                     this.mapContainer.sort("y");
+                    this.addTileListeners(); 
                     this.calculateMapBoundaries();
                     this.updateClimateScore();
-                    // InputManager already initialized in create() line 271 - no need to reinitialize
+                    this.setListeners();
                     // Reset undo/redo history after resume
                     this._history = [];
                     this.saveState(); // Save the current state as the only undo point
@@ -1220,257 +971,12 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    async loadMapFromDatabase(mapData) {
-        this.isLoadingMap = true;
-        console.log("Loading map from crowd-sourced database...");
+    addTileListeners() {
+        for (let i = 0; i < this.mapTiles.length; i++) {
+            const scene = this; // Scene reference - CRITICAL for accessing gameState
+            const tile = this.mapTiles[i]; // Current tile reference
 
-        // Use current mapTilesWidth/Height values instead of saved ones
-        // This allows changing grid size by updating the variables at the top of the file
-
-        // Use centralized grid start calculation
-        const gridStart = this.calculateGridStart(mapTilesHeight);
-        this.startX = gridStart.startX;
-        this.startY = gridStart.startY;
-
-        // Set grid dimensions using current mapTilesWidth/Height (not saved values)
-        this.gridWidth = mapTilesWidth;
-        this.gridHeight = mapTilesHeight;
-
-        console.log(`📐 Using grid dimensions: ${mapTilesWidth}x${mapTilesHeight} (ignoring saved ${mapData.gridWidth}x${mapData.gridHeight})`);
-
-        // Reset tileChanges
-        this.tileChanges = [];
-
-        // Restore landUseInfo from database
-        if (mapData.landUseInfo) {
-            landUseInfo.clear();
-            for (const [key, value] of Object.entries(mapData.landUseInfo)) {
-                landUseInfo.set(key, value);
-            }
-        }
-
-        // Clear the playboard
-        this.clearPlayboard();
-
-        // 🏗️ PRE-CREATE NULL GRID (needed for layTilesOnPlayboard to work)
-        // Find the CENTER tile to use as the grid reference point (same as Resume Game logic)
-        const tileData = mapData.tiles;
-        if (tileData.length > 0) {
-            // Use SAVED grid center to find the reference tile
-            const savedCenterX = Math.floor(mapData.gridWidth / 2);
-            const savedCenterY = Math.floor(mapData.gridHeight / 2);
-
-            console.log(`🎯 Looking for center tile at saved grid position (${savedCenterX}, ${savedCenterY})`);
-
-            // Find the tile at the center grid position
-            const centerTile = tileData.find(t => t.x === savedCenterX && t.y === savedCenterY);
-
-            if (!centerTile) {
-                console.error(`❌ Center tile not found at (${savedCenterX}, ${savedCenterY})! Using first tile as fallback.`);
-                // Fallback to first tile
-                const firstTile = tileData[0];
-                const [minLat, minLon, maxLat, maxLon] = firstTile.id.split('_').map(parseFloat);
-                const boxSize = maxLat - minLat;
-                const initialBox = { minLat, minLon, maxLat, maxLon };
-                // Use CURRENT mapTilesWidth/Height for the new grid
-                this.createNullGrid(mapTilesWidth, mapTilesHeight, initialBox, boxSize);
-            } else {
-                console.log(`✅ Found center tile: ID ${centerTile.id}`);
-                const [minLat, minLon, maxLat, maxLon] = centerTile.id.split('_').map(parseFloat);
-                const boxSize = maxLat - minLat; // Calculate box size from tile ID
-
-                // The center tile's bounding box IS the initialBox
-                const initialBox = {
-                    minLat: minLat,
-                    minLon: minLon,
-                    maxLat: maxLat,
-                    maxLon: maxLon
-                };
-
-                console.log(`🏗️ Creating null grid for database map: ${mapTilesWidth}×${mapTilesHeight} (saved was ${mapData.gridWidth}×${mapData.gridHeight}) centered at ${centerTile.id}`);
-                // Use CURRENT mapTilesWidth/Height for the new grid
-                this.createNullGrid(mapTilesWidth, mapTilesHeight, initialBox, boxSize);
-            }
-        }
-
-        // Load tiles one by one
-        let index = 0;
-        let listenersActivated = false;
-        const EARLY_ACTIVATION_THRESHOLD = 1; // Enable tile interaction immediately
-
-        const loadTile = () => {
-            if (index < tileData.length) {
-                const { x, y, tileType, id } = tileData[index];
-                const box = { id, x, y };
-
-                this.layTilesOnPlayboard(tileType, x, y, box);
-                this.mapContainer.sort("y");
-
-                if (index % 10 === 0) {
-                    this.updateClimateScore();
-                }
-
-                // 🎮 Enable interaction early - database loads are fast but still benefit from this
-                if (!listenersActivated && index >= EARLY_ACTIVATION_THRESHOLD) {
-                    this.addTileListeners();
-                    listenersActivated = true;
-                    console.log(`🎮 Map is now interactive! (${index}/${tileData.length} tiles loaded from database)`);
-
-                    // HTML/CSS buttons now used instead of Phaser UIScene
-                    // (Phaser UI kept hidden - see line 250)
-
-                    // Update climate score immediately when first tile appears
-                    this.climateManager.recalculateScore();
-                }
-
-                index++;
-                setTimeout(loadTile, 0);
-            } else {
-                // 🏁 Finalize map loading
-                // Mark loading as complete
-                this.gameState.isLoading = false;
-                this.isLoadingMap = false;
-
-                this.mapContainer.sort("y");
-                updateAllRoadPatterns(this);
-                updateAllRailPatterns(this);
-                fixBeachTileFrames(this);
-                this.filterNonAdjacentBeaches();
-                this.calculateMapBoundaries();
-                this.updateClimateScore();
-                // InputManager already initialized in create() - no need to reinitialize
-
-                // Save to localStorage using MapDataService
-                this.mapDataService.saveMapToLocalStorage(mapData, this.tileChanges);
-                this.mapDataService.saveOriginalMapToLocalStorage(mapData);
-
-                // Reset undo/redo history
-                this._history = [];
-                this.saveState();
-                this._redo = [];
-
-                console.log("✅ Map loaded from database successfully!");
-            }
-        };
-
-        loadTile();
-    }
-
-    async loadOriginalMap() {
-        this.isLoadingMap = true;
-        console.log("Loading original map from current location...");
-
-        const originalMapString = localStorage.getItem("originalMap");
-
-        // Use centralized grid start calculation
-        const gridStart = this.calculateGridStart(mapTilesHeight);
-        this.startX = gridStart.startX;
-        this.startY = gridStart.startY;
-
-        if (!originalMapString) {
-            console.warn("No original map found. Cannot restore.");
-            this.isLoadingMap = false;
-            return;
-        }
-
-        try {
-            const savedData = JSON.parse(originalMapString);
-
-            if (!savedData || !savedData.tiles || !Array.isArray(savedData.tiles)) {
-                throw new Error("Original map data is invalid or empty.");
-            }
-
-            // Restore grid dimensions
-            mapTilesWidth = savedData.gridWidth;
-            mapTilesHeight = savedData.gridHeight;
-
-            // Use centralized grid start calculation
-            const gridStart = this.calculateGridStart(mapTilesHeight);
-            this.startX = gridStart.startX;
-            this.startY = gridStart.startY;
-
-            // Reset tileChanges (original map has no changes)
-            this.tileChanges = [];
-
-            // Restore landUseInfo from original map
-            if (savedData.landUseInfo) {
-                landUseInfo.clear();
-                for (const [key, value] of Object.entries(savedData.landUseInfo)) {
-                    landUseInfo.set(key, value);
-                }
-            }
-
-            // Load tile data
-            const tileData = savedData.tiles;
-
-            // Clear the playboard to prepare for reloading
-            this.clearPlayboard();
-
-            // Load tiles one by one
-            let index = 0;
-            let listenersActivated = false;
-            const EARLY_ACTIVATION_THRESHOLD = 1; // Enable tile interaction immediately
-
-            const loadTile = () => {
-                if (index < tileData.length) {
-                    const { x, y, tileType, id } = tileData[index];
-
-                    // Construct a box object with the id
-                    const box = { id, x, y };
-
-                    this.layTilesOnPlayboard(tileType, x, y, box);
-                    this.mapContainer.sort("y");
-
-                    if (index % 10 === 0) {
-                        this.updateClimateScore();
-                    }
-
-                    // 🎮 Enable interaction early - restoring original map
-                    if (!listenersActivated && index >= EARLY_ACTIVATION_THRESHOLD) {
-                        this.addTileListeners();
-                        listenersActivated = true;
-                        console.log(`🎮 Map is now interactive! (${index}/${tileData.length} tiles - restoring original)`);
-                    }
-
-                    index++;
-                    setTimeout(loadTile, 0);
-                } else {
-                    // Ensure tiles are sorted correctly for rendering
-                    this.mapContainer.sort("y");
-                    updateAllRoadPatterns(this);
-                    updateAllRailPatterns(this);
-                    fixBeachTileFrames(this);
-                    this.filterNonAdjacentBeaches();
-                    this.calculateMapBoundaries();
-                    this.updateClimateScore();
-
-                    // Reset undo/redo history after loading original
-                    this._history = [];
-                    this.saveState(); // Save the original state as the first undo point
-                    this._redo = [];
-                    this.isLoadingMap = false;
-
-                    console.log("Original map loaded successfully");
-                }
-            };
-
-            loadTile();
-        } catch (e) {
-            console.error("Error loading original map data:", e.message);
-            this.isLoadingMap = false;
-        }
-    }
-
-    addListenerToTile(tile) {
-        // Delegate to TileInteractionManager
-        this.tileInteractionManager.addListenerToTile(tile);
-    }
-
-    // Legacy method - kept for reference, now handled by TileInteractionManager
-    _oldAddListenerToTile_DEPRECATED(tile) {
-        const scene = this; // Scene reference - CRITICAL for accessing gameState
-
-        tile.removeAllListeners(); // Clear any previous listeners
+            tile.removeAllListeners(); // Clear any previous listeners
 
             // ===================================================================
             // POINTEROVER LISTENER
@@ -1704,7 +1210,7 @@ export class GameScene extends Phaser.Scene {
                 } else {
                 }
 
-                for (let i = 0; i < tilePosArray.length; i++) {
+                for (i = 0; i < tilePosArray.length; i++) {
                     let tileCheck = scene.mapTilesPos.indexOf(tilePosArray[i]);
 
                     if (tileCheck !== -1) {
@@ -1740,7 +1246,7 @@ export class GameScene extends Phaser.Scene {
                         allAreEqual(mapTexArray) === true
                     ) {
                         scene.gameState.placeTile = true;
-                        for (let i = 0; i < tileArray.length; i++) {
+                        for (i = 0; i < tileArray.length; i++) {
                             if (tileArray[i] && typeof tileArray[i].setTint === 'function') {
                                 tileArray[i].setTint(0x00ff00);
                             }
@@ -1771,7 +1277,7 @@ export class GameScene extends Phaser.Scene {
                         }
                     } else {
                         scene.gameState.placeTile = false;
-                        for (let i = 0; i < tileArray.length; i++) {
+                        for (i = 0; i < tileArray.length; i++) {
                             if (tileArray[i] && typeof tileArray[i].setTint === 'function') {
                                 tileArray[i].setTint(0xf0000f);
                             }
@@ -1847,7 +1353,7 @@ export class GameScene extends Phaser.Scene {
                 tilePosArray.push(tile7Pos);
                 tilePosArray.push(tile8Pos);
 
-                for (let i = 0; i < tilePosArray.length; i++) {
+                for (i = 0; i < tilePosArray.length; i++) {
                     let tileCheck = scene.mapTilesPos.indexOf(tilePosArray[i]);
 
                     if (tileCheck !== -1) {
@@ -1881,6 +1387,8 @@ export class GameScene extends Phaser.Scene {
                     if (tileaArray[0] && typeof tileaArray[0].setTexture === 'function') {
                         tileaArray[0].setTexture("road");
                     }
+                    const newNum = findClimateNumber("road");
+                    climateNum += newNum;
 
                     newTileType = "road";
 
@@ -1890,22 +1398,11 @@ export class GameScene extends Phaser.Scene {
 
                     updateAllRoadPatterns(scene);
                     updateAllRailPatterns(scene);
-
-                    // Emit tile placed event
-                    scene.emitter.emit('TILE_PLACED', {
-                        oldTileType: this.texture.key,
-                        newTileType: 'road'
-                    });
                 }
 
-                console.log(`🎯 Tile clicked. placeTile: ${scene.gameState.placeTile}, texture: ${this.texture.key}, destroy: ${scene.gameState.destroy}, newTile: ${scene.gameState.newTile}`);
-
-                // Check each condition individually
-                const canPlace = scene.gameState.placeTile && this.texture.key !== "road" && !scene.gameState.destroy;
-                console.log(`🔍 Placement check - placeTile: ${scene.gameState.placeTile}, notRoad: ${this.texture.key !== "road"}, notDestroy: ${!scene.gameState.destroy}, canPlace: ${canPlace}`);
-
                 if (scene.gameState.placeTile && this.texture.key !== "road" && !scene.gameState.destroy) {
-                    console.log(`🔨 Placing tile: ${scene.gameState.newTile}`);
+                    scene.updateClimateScore();
+
                     if (tileArray[0] && typeof tileArray[0].setTexture === 'function') {
                         tileArray[0].setTexture(scene.gameState.newTile, scene.gameState.frameNumber);
                     }
@@ -1979,7 +1476,11 @@ export class GameScene extends Phaser.Scene {
                             }
                         });
 
-                        // Auto-save removed - use explicit Save button instead
+                        const savedMap = JSON.parse(localStorage.getItem("savedMap")) || {};
+                        savedMap.tileChanges = scene.tileChanges;
+                        savedMap.landUseInfo = Object.fromEntries(landUseInfo.entries());
+                        localStorage.setItem("savedMap", JSON.stringify(savedMap));
+                        console.log("Tile changes saved to localStorage in if block.");
                         return;
                     }
                     // ✅ FIXED: Use scene.gameState
@@ -2032,7 +1533,10 @@ export class GameScene extends Phaser.Scene {
                                 }
                             }
 
-                            // Auto-save removed - use explicit Save button instead
+                            const savedMap = JSON.parse(localStorage.getItem("savedMap")) || {};
+                            savedMap.tileChanges = scene.tileChanges;
+                            savedMap.landUseInfo = Object.fromEntries(landUseInfo.entries());
+                            localStorage.setItem("savedMap", JSON.stringify(savedMap));
                             console.log("Setting texture and origin for the medium tile.");
 
                             centerTile.setTexture(scene.gameState.newTile);
@@ -2044,38 +1548,22 @@ export class GameScene extends Phaser.Scene {
                             } else {
                             }
                         }
-                        // Emit tile placed event for multi-tile
-                        scene.emitter.emit('TILE_PLACED', {
-                            oldTileType: this.texture.key,
-                            newTileType: scene.gameState.newTile
-                        });
                         return;
                     }
-
-                    // Emit tile placed event for single-tile
-                    scene.emitter.emit('TILE_PLACED', {
-                        oldTileType: this.texture.key,
-                        newTileType: scene.gameState.newTile
-                    });
                 } else if (scene.gameState.destroy) {
                     if (tileArray.length === 0) {
                         tileArray.push(this);
                     }
 
                     let currentSpriteWidth = tileArray[0].width;
-                    const oldTileType = this.texture.key;
 
                     tileArray[0].play("bulldozing");
-                    tileArray[0].setTexture("ground");
-                    scene.mapTiles[tile0].setTexture("ground");
+                    tileArray[0].texture.key = "ground";
+                    scene.mapTiles[tile0].texture.key = "ground";
                     scene.mapTiles[tile0].setOrigin(0.5, 0.5);
                     scene.mapArray[tile0] = "ground";
                     newTileType = "ground";
-
-                    // Emit tile removed event for bulldoze
-                    scene.emitter.emit('TILE_REMOVED', {
-                        tileType: oldTileType
-                    });
+                    scene.updateClimateScore();
 
                     if (currentSpriteWidth == 96) {
                         for (let i = 0; i < tilePosArray.length; i++) {
@@ -2124,7 +1612,11 @@ export class GameScene extends Phaser.Scene {
 
                     console.log("Tile changes updated:", scene.tileChanges);
 
-                    // Auto-save removed - use explicit Save button instead
+                    const savedMap = JSON.parse(localStorage.getItem("savedMap")) || {};
+                    savedMap.tileChanges = scene.tileChanges;
+                    savedMap.landUseInfo = Object.fromEntries(landUseInfo.entries());
+                    localStorage.setItem("savedMap", JSON.stringify(savedMap));
+                    console.log("Tile changes saved to localStorage.");
                 }
 
                 //if (scene.economySim && newTileType) {
@@ -2137,7 +1629,13 @@ export class GameScene extends Phaser.Scene {
                     scene.saveState();
                 }
 
-                // Info text now updated on pointerdown in scene, not per-tile
+                const tileKeyDown = gridToTileKey.get(`${this.gridX}_${this.gridY}`);
+                const landUseDataDown = landUseInfo.get(tileKeyDown);
+                if (landUseDataDown && landUseDataDown.maxAreaType) {
+                    scene.landUseText.text = 'Land Use: ' + landUseDataDown.maxAreaType;
+                } else {
+                    scene.landUseText.text = '';
+                }
             });
 
             tile.on("pointerout", function (pointer) {
@@ -2153,25 +1651,19 @@ export class GameScene extends Phaser.Scene {
                     for (let i = 0; i < scene.mapTiles.length; i++) {
                         let mapTex = scene.mapTiles[i];
                         mapTex.alpha = 1.0;
+
+                        scene.getInfo.text = "";
                     }
                 }
 
-                // Clear info text on pointer out
-                if (scene.infoTextElement) {
-                    scene.infoTextElement.textContent = '';
-                    scene.infoTextElement.classList.remove('show');
+                if (scene.landUseText) {
+                    scene.landUseText.text = '';
                 }
             });
-    }
-
-    addTileListeners() {
-        // Add listeners to all tiles by calling addListenerToTile for each
-        for (let i = 0; i < this.mapTiles.length; i++) {
-            this.addListenerToTile(this.mapTiles[i]);
         }
     }
 
-    buildGrid(mapTiles, c) {
+buildGrid(mapTiles, c) {
     // Create an empty 2D array
     let grid = Array.from({ length: c }, () => Array(c));
 
@@ -2331,31 +1823,187 @@ isPointerOverUI(pointer) {
            pointer.y <= this.uiBounds.y + this.uiBounds.height;
 }
 
-// Rotation methods delegated to RotationHelper
 rotateMapClockwise() {
-    // Use stored grid dimensions (available during streaming)
-    const gridSize = this.gridWidth || mapTilesWidth;
-    this.rotationHelper.rotateMapClockwise(gridSize);
+    console.log("rotateMapClockwise called!");
+    this.isRotating = true;
+
+    const mapWidth = mapTilesWidth;
+    const isOddGrid = mapWidth % 2 !== 0;
+
+    // Step 1: Build grid lookup
+    const gridLookup = this._buildGridLookup();
+
+    // Step 2: Calculate new textures
+    const newTextures = this._calculateRotatedTextures(gridLookup, mapWidth, isOddGrid);
+
+    // Step 3: Apply textures and collect medium tiles
+    const mediumTiles = this._applyRotatedTextures(newTextures);
+
+    // Step 5: REBUILD mapTilesPos array (CRITICAL FIX!)
+    this.mapTilesPos = [];
+    for (let i = 0; i < this.mapTiles.length; i++) {
+        const tile = this.mapTiles[i];
+        this.mapTilesPos.push(tile.x + ", " + tile.y);
+    }
+
+    // Step 6: Reposition medium tiles (now using updated mapTilesPos)
+    if (mediumTiles.length > 0) {
+        this._repositionMediumTiles(mediumTiles);
+    }
+
+    // Step 7: Finalize
+    this._finalizeRotation();
+
+    this.isRotating = false;
 }
 
 _buildGridLookup() {
-    return this.rotationHelper._buildGridLookup();
+    const lookup = new Map();
+    for (const tile of this.mapTiles) {
+        const key = `${tile.gridX},${tile.gridY}`;
+        lookup.set(key, tile);
+    }
+    return lookup;
 }
 
 _calculateRotatedTextures(gridLookup, mapWidth, isOddGrid) {
-    return this.rotationHelper._calculateRotatedTextures(gridLookup, mapWidth, isOddGrid);
+    const newTextures = [];
+
+    for (let i = 0; i < this.mapTiles.length; i++) {
+        const tile = this.mapTiles[i];
+        
+        // COUNTER-CLOCKWISE rotation formulas
+        let rotatedX, rotatedY;
+        
+        if (isOddGrid) {
+            // Odd grid: counter-clockwise
+            rotatedX = mapWidth - tile.gridY - 1;
+            rotatedY = tile.gridX;
+            
+            // Adjust for odd grids
+            rotatedX -= Math.floor(mapWidth / 2);
+            rotatedY -= Math.floor(mapWidth / 2);
+            rotatedX += Math.floor(mapWidth / 2);
+            rotatedY += Math.floor(mapWidth / 2);
+        } else {
+            // Even grid: counter-clockwise
+            rotatedX = mapWidth - tile.gridY + 1;
+            rotatedY = tile.gridX;
+        }
+
+        // Look up the tile at the rotated position
+        const lookupKey = `${rotatedX},${rotatedY}`;
+        const rotatedTile = gridLookup.get(lookupKey);
+
+        if (rotatedTile) {
+            newTextures.push(rotatedTile.texture.key);
+        } else {
+            console.warn(`No tile found at rotated position (${rotatedX}, ${rotatedY})`);
+            newTextures.push(null);
+        }
+    }
+
+    return newTextures;
 }
 
 _applyRotatedTextures(newTextures) {
-    return this.rotationHelper._applyRotatedTextures(newTextures);
+    const mediumTiles = [];
+
+    for (let i = 0; i < this.mapTiles.length; i++) {
+        const tile = this.mapTiles[i];
+        const texture = newTextures[i];
+
+        if (!texture) continue;
+
+        // Stop current animation
+        tile.anims.stop();
+
+        // Set new texture
+        tile.setTexture(texture);
+
+        // Handle different tile sizes
+        if (tile.width === 32) {
+            tile.setOrigin(0.5, 0.5);
+        } else if (tile.width === 64) {
+            mediumTiles.push(tile);
+        } else if (tile.width === 96) {
+            tile.setOrigin(0.5, 0.5);
+        }
+
+        // Restart animation if it exists
+        if (this.anims.exists(texture)) {
+            tile.play({ key: texture, randomFrame: true });
+        }
+    }
+
+    return mediumTiles;
 }
 
 _repositionMediumTiles(mediumTiles) {
-    this.rotationHelper._repositionMediumTiles(mediumTiles);
+    if (mediumTiles.length === 0) return;
+
+    for (let i = 0; i < mediumTiles.length; i++) {
+        const pX = mediumTiles[i].x;
+        const pY = mediumTiles[i].y;
+        const tex = mediumTiles[i].texture.key;
+
+        // Set the current medium tile to null
+        mediumTiles[i].setTexture("null");
+        mediumTiles[i].setOrigin(0.5, 0.5);
+
+        // Calculate the 3 positions that form the medium tile pattern
+        let tilePosArray = [];
+        let x1 = pX - tileWidth / 2;
+        let y1 = pY - tileHeight / 2;
+        let x2 = pX + tileWidth / 2;
+        let y2 = pY - tileHeight / 2;
+        let x3 = pX;
+        let y3 = pY - tileHeight;
+
+        let tile1Pos = x1 + ", " + y1;
+        let tile2Pos = x2 + ", " + y2;
+        let tile3Pos = x3 + ", " + y3;
+
+        tilePosArray.push(tile1Pos, tile2Pos, tile3Pos);
+
+        let changeSprite = this.mapTilesPos.indexOf(tilePosArray[0]);
+        if (changeSprite !== -1) {
+            console.log("Placing medium tile at position 0, index " + changeSprite);
+            this.mapTiles[changeSprite].setTexture(tex);
+            this.mapTiles[changeSprite].setOrigin(0.25, 0.47);
+        } else {
+            console.log("ERROR: Could not find position for medium tile anchor!");
+        }
+
+        let foundCount = 0;
+        for (let j = 1; j < tilePosArray.length; j++) {
+            let index = this.mapTilesPos.indexOf(tilePosArray[j]);
+            if (index !== -1) {
+                // Only null if it's already null or green_apartments
+                const currentTexture = this.mapTiles[index].texture.key;
+                if (currentTexture === "null" || currentTexture === "green_apartments") {
+                    foundCount++;
+                    console.log("  Nulling index " + index + ": was " + currentTexture);
+                    this.mapTiles[index].setTexture("null");
+                    this.mapTiles[index].setOrigin(0.5, 0.5);
+                } else {
+                    console.log("  SKIPPING index " + index + ": has texture " + currentTexture);
+                }
+            } else {
+                console.log("  NOT FOUND: " + tilePosArray[j]);
+            }
+        }
+    }
 }
 
 _finalizeRotation() {
-    this.rotationHelper._finalizeRotation();
+    // Rebuild mapArray from current tiles
+    this.mapArray = this.mapTiles.map(tile => tile.texture.key);
+
+    // Update road/rail patterns and beach tiles
+    updateAllRoadPatterns(this);
+    updateAllRailPatterns(this);
+    fixBeachTileFrames(this);
 }
 
 getNeighborsForTile(tile, scene) {
@@ -2408,11 +2056,83 @@ getNeighborsForTile(tile, scene) {
     return validTiles;
 }
 
-// setListeners() moved to InputManager
+setListeners() {
+    // Remove all existing listeners first (using the stored bound functions)
+    this.emitter.off("MOVE MAP", this.boundMoveMap);
+    this.emitter.off("ZOOM MAP", this.boundZoomMap);
+    this.emitter.off("ROTATE MAP", this.boundRotateMap);
+    this.emitter.off("INFO MAP", this.boundInfoMap);
+    this.emitter.off("DESTROY", this.boundDestroy);
+    this.emitter.off("PLANT TREES", this.boundPlantTrees);
+    this.emitter.off("BUILD MEDIUM", this.boundBuildMedium);
+    this.emitter.off("BUILD LARGE", this.boundBuildLarge);
+    this.emitter.off("BUILD ROAD", this.boundBuildRoad);
+    this.emitter.off("BUILD BIKE LANE", this.boundBuildBikeLane);
+    this.emitter.off("BUILD WIND", this.boundBuildWind);
+    this.emitter.off("BUILD SOLAR", this.boundBuildSolar);
+    this.emitter.off("GO HOME", this.boundGoHome);
+    this.emitter.off("UN DO", this.boundUnDo);
+    
+    // Now register the listeners (using stored bound functions)
+    this.emitter.on("MOVE MAP", this.boundMoveMap);
+    this.emitter.on("ZOOM MAP", this.boundZoomMap);
+    this.emitter.on("ROTATE MAP", this.boundRotateMap);
+    this.emitter.on("INFO MAP", this.boundInfoMap);
+    this.emitter.on("DESTROY", this.boundDestroy);
+    this.emitter.on("PLANT TREES", this.boundPlantTrees);
+    this.emitter.on("BUILD MEDIUM", this.boundBuildMedium);
+    this.emitter.on("BUILD LARGE", this.boundBuildLarge);
+    this.emitter.on("BUILD ROAD", this.boundBuildRoad);
+    this.emitter.on("BUILD BIKE LANE", this.boundBuildBikeLane);
+    this.emitter.on("BUILD WIND", this.boundBuildWind);
+    this.emitter.on("BUILD SOLAR", this.boundBuildSolar);
+    this.emitter.on("GO HOME", this.boundGoHome);
+    this.emitter.on("UN DO", this.boundUnDo);
+    
+    // Keyboard listeners (these are fine as-is)
+    this.input.keyboard.on('keydown-U', () => this.undoState());
+    this.input.keyboard.on('keydown-Q', () => this.redoState());
+}
 
-// Legacy method - now delegates to ClimateManager
 updateClimateScore() {
-    return this.climateManager.recalculateScore();
+    let score = 0;
+    const scores = [];
+
+    // Calculate total score
+    for (let tile of this.mapTiles) {
+        const tileScore = findClimateNumber(tile.texture.key);
+        score += tileScore;
+        scores.push(tileScore);
+    }
+
+    // Update instance variables
+    this.currentClimateScore = score;
+    climateNum = score; // Keep global in sync for backwards compatibility
+    climateNumArray = scores;
+
+    // Update display with responsive positioning
+    const gWidth = this.sys.game.canvas.width;
+    const gHeight = this.sys.game.canvas.height;
+
+    // Right-aligned: 30px from right edge, 32px from bottom
+    const climateTextX = gWidth - 30;
+    const climateTextY = gHeight - 32;
+
+    if (this.climateText) {
+        this.climateText.text = "Total Regional Climate Impact: " + score;
+        this.climateText.setPosition(climateTextX, climateTextY);
+    } else {
+        // Fallback: create if it doesn't exist
+        this.climateText = this.add
+            .text(climateTextX, climateTextY, "Total Regional Climate Impact: " + score, {
+                color: "#00FF00",
+                fontSize: '16px'
+            })
+            .setOrigin(1, 0); // Right-aligned
+        this.cameras.main.ignore(this.climateText);
+    }
+
+    return score;
 }
 
     repositionUI() {
@@ -2421,55 +2141,232 @@ updateClimateScore() {
         const gHeight = this.sys.game.canvas.height;
         // ... your existing code ...
 
-        // Land use info now uses DOM element with fixed CSS positioning
+        if (this.landUseText) {
+            this.landUseText.setPosition(30, gHeight - 70);
+        }
 
         console.log("UI repositioned for canvas size:", gWidth, "x", gHeight);
         console.log("New map start position:", this.startX, this.startY);
     }
 
-// Button handlers moved to InputManager (BuildSolar, BuildWind, PlantTrees, etc.)
+//EVENTS:
+// ============================================
+// BUTTON HANDLER MIGRATION TEMPLATES
+// Copy-paste these to replace your existing methods
+// ============================================
+
+// 1. BUILD SOLAR
+BuildSolar() {
+    this.gameState.setTool({
+        smallTile: true,
+        newTile: 'power:plant (solar)',
+        solar: true,
+        frameNumber: 0
+    });
+}
+
+// 2. BUILD WIND
+BuildWind() {
+    this.gameState.setTool({
+        smallTile: true,
+        newTile: 'wind',
+        wind: true,
+        frameNumber: 0
+    });
+}
+
+// 3. PLANT TREES
+PlantTrees() {
+    this.gameState.setTool({
+        smallTile: true,
+        newTile: 'wood',
+        trees: true,
+        frameNumber: 0
+    });
+}
+
+// 4. BUILD MEDIUM (Green Apartments)
+BuildMedium() {
+    this.gameState.setTool({
+        smallTile: true,
+        mediumTile: true,
+        newTile: 'green_apartments',
+        frameNumber: 0
+    });
+}
+
+// 5. BUILD LARGE (Hydrogen)
+BuildLarge() {
+    this.gameState.setTool({
+        smallTile: true,
+        mediumTile: true,
+        largeTile: true,
+        newTile: 'hydrogen',
+        frameNumber: 0
+    });
+}
+
+// 6. BUILD ROAD
+BuildRoad() {
+    this.gameState.setTool({
+        smallTile: true,
+        newTile: 'road',
+        road: true,
+        frameNumber: 0
+    });
+}
+
+// 7. BUILD BIKE LANE
+BuildBikeLane() {
+    this.gameState.setTool({
+        smallTile: true,
+        newTile: 'road',
+        bike: true,
+        frameNumber: 0
+    });
+}
+
+// 8. DESTROY
+Destroy() {
+    this.gameState.setTool({
+        smallTile: true,
+        destroy: true,
+        newTile: 'destroy',
+        frameNumber: 0
+    });
+}
+
+// 9. MOVE MAP
+MoveMap() {
+    this.gameState.resetAllModes();
+    this.gameState.moveBool = true;
+}
+
+// 10. ZOOM MAP
+ZoomMap() {
+    const camGame = this.cameras.main;
+    const bkgd = this.backgroundImage;
+
+    camGame.setZoom(4);
+
+    if (bkgd) {
+        bkgd.setScale(4);
+    }
+}
+
+// 11. ROTATE MAP
+RotateMap() {
+    this.gameState.rotateBool = true;
+    this.rotateMapClockwise();
+}
+
+// 12. INFO MAP
+InfoMap() {
+    this.gameState.resetAllModes();
+    this.gameState.infoBool = true;
+}
+
+// 13. GO HOME
+GoHome() {
+    this.gameState.homeBool = true;
+
+    // Center map immediately
+    if (this.mapContainer) {
+        this.mapContainer.x = 0;
+        this.mapContainer.y = 0;
+    }
+}
+
+// 14. UNDO (already simple, but here for completeness)
+UnDo() {
+    console.log("Moving back to previous state");
+    this.undoState();
+}
 
 /* ─────── state HISTORY (5-deep) ─────── */
 saveState() {
-    this.saveLoadManager.saveState();
+    // build a lightweight snapshot (NO live Phaser objects)
+    const snap = {
+        tiles: this.mapTiles.map(t => ({
+            gridX: t.gridX,
+            gridY: t.gridY,
+            x: t.x,
+            y: t.y,
+            key: t.texture.key,
+            frame: t.frame?.name ?? 0,
+            type: t.type ?? null,
+            id: t.id ?? null
+        })),
+        mapTilesPos: [...this.mapTilesPos],
+        mapTilesType: [...this.mapTilesType],
+        mapArray: [...this.mapArray],
+        tileChanges: JSON.parse(JSON.stringify(this.tileChanges)),
+        changedIdx: { ...(this.changedIndexesMap || {}) },
+        climateNum: climateNum
+    };
+
+    // push & trim (FIFO)
+    this._history.push(snap);
+    if (this._history.length > this._historyMax) this._history.shift();
+
+    // clearing redo stack because a brand-new change invalidates forward history
+    if (this._redo) this._redo.length = 0;
 }
 
 undoState() {
-    this.saveLoadManager.undoState();
-}
+    console.log("🟢 undoState() executing...");
+    console.log("   History length:", this._history.length);
+    console.log("   History contents:", this._history);
+    // need at least two snapshots (current + previous) to undo
+    if (this._history.length < 2) return;
 
-redoState() {
-    this.saveLoadManager.redoState();
-}
-
-/**
- * Save the current game state to localStorage
- * Called manually by the user via Save button or S key
- */
-saveGameToLocalStorage() {
-    try {
-        const savedMap = JSON.parse(localStorage.getItem("savedMap")) || {};
-
-        // Update tileChanges and landUseInfo
-        savedMap.tileChanges = this.tileChanges;
-        savedMap.landUseInfo = Object.fromEntries(landUseInfo.entries());
-
-        // Save to localStorage
-        localStorage.setItem("savedMap", JSON.stringify(savedMap));
-
-        console.log(`💾 Game saved! (${this.tileChanges.length} tile changes)`);
-
-        // Visual feedback: flash the Save menu item briefly
-        const saveButton = document.querySelector('[data-action="save"]');
-        if (saveButton) {
-            saveButton.style.backgroundColor = '#00ff00';
-            setTimeout(() => {
-                saveButton.style.backgroundColor = '';
-            }, 200);
-        }
-    } catch (error) {
-        console.error("❌ Failed to save game:", error);
+    // Only store snapshot for redo if this is NOT a rotation state AND we can actually undo
+    if (this._redo && !this.isRotating) {
+        const currentSnap = this.__captureSnapshot();
+        this._redo.push(currentSnap);
     }
+
+    // drop current, fetch previous
+    this._history.pop();
+    const snap = this._history[this._history.length - 1];
+
+    // REBUILD BOARD  ──────────────────────────────────────
+    // 1. destroy current sprites
+    this.mapTiles.forEach(s => s.destroy());
+    this.mapTiles.length = 0;
+
+    // 2. recreate sprites
+    snap.tiles.forEach(d => {
+        const s = this.add.sprite(d.x, d.y, d.key, d.frame)
+            .setScale(setScale)
+            .setOrigin(d.key === "green_apartments" ? 0.25 : 0.5,
+                d.key === "green_apartments" ? 0.47 : 0.5)
+            .setInteractive({ pixelPerfect: true, alphaTolerance: 1 });
+        s.gridX = d.gridX;
+        s.gridY = d.gridY;
+        s.type = d.type;
+        s.id = d.id;
+        this.mapContainer.add(s);
+        this.mapTiles.push(s);
+    });
+
+    // 3. restore parallel structures
+    this.mapTilesPos = [...snap.mapTilesPos];
+    this.mapTilesType = [...snap.mapTilesType];
+    this.mapArray = [...snap.mapArray];
+    this.tileChanges = JSON.parse(JSON.stringify(snap.tileChanges));
+    this.changedIndexesMap = { ...snap.changedIdx };
+    climateNum = snap.climateNum;
+
+    // 4. re-compute visuals / score
+    this.mapContainer.sort('y');
+    this.updateClimateScore?.();
+    updateAllRoadPatterns?.(this);
+    updateAllRailPatterns?.(this);
+    fixBeachTileFrames?.(this);
+
+    // 5. re-attach tile listeners
+    this.addTileListeners?.();
 }
 
 //UPDATES:
@@ -2479,21 +2376,95 @@ update() {
     for (let i = 0; i < this.mapTiles.length; i++) {
         this.mapArray[i] = this.mapTiles[i].texture.key;
     }
-
-    // Handle arrow key input for camera panning
-    if (this.inputManager) {
-        this.inputManager.update();
-    }
 }
 
+// Internal utility that captures the current board state without touching history/redo
 __captureSnapshot() {
-    return this.saveLoadManager._captureSnapshot();
+    return {
+        tiles: this.mapTiles.map(t => ({
+            gridX: t.gridX,
+            gridY: t.gridY,
+            x: t.x,
+            y: t.y,
+            key: t.texture.key,
+            frame: t.frame?.name ?? 0,
+            type: t.type ?? null,
+            id: t.id ?? null
+        })),
+        mapTilesPos: [...this.mapTilesPos],
+        mapTilesType: [...this.mapTilesType],
+        mapArray: [...this.mapArray],
+        tileChanges: JSON.parse(JSON.stringify(this.tileChanges)),
+        changedIdx: { ...(this.changedIndexesMap || {}) },
+        climateNum: climateNum
+    };
 }
 
+redoState() {
+    if (!this._redo || this._redo.length === 0) return; // nothing to redo
+
+    const snap = this._redo.pop();
+
+    // Safety check: don't exceed history limit
+    if (this._history.length >= this._historyMax) {
+        this._history.shift(); // remove oldest if at limit
+    }
+
+    this._history.push(snap);
+
+    // Rebuild board from snapshot
+    this.mapTiles.forEach(s => s.destroy());
+    this.mapTiles.length = 0;
+
+    snap.tiles.forEach(d => {
+        const s = this.add.sprite(d.x, d.y, d.key, d.frame)
+            .setScale(setScale)
+            .setOrigin(d.key === "green_apartments" ? 0.25 : 0.5,
+                d.key === "green_apartments" ? 0.47 : 0.5)
+            .setInteractive({ pixelPerfect: true, alphaTolerance: 1 });
+        s.gridX = d.gridX;
+        s.gridY = d.gridY;
+        s.type = d.type;
+        s.id = d.id;
+        this.mapContainer.add(s);
+        this.mapTiles.push(s);
+    });
+
+    this.mapTilesPos = [...snap.mapTilesPos];
+    this.mapTilesType = [...snap.mapTilesType];
+    this.mapArray = [...snap.mapArray];
+    this.tileChanges = JSON.parse(JSON.stringify(snap.tileChanges));
+    this.changedIndexesMap = { ...snap.changedIdx };
+    climateNum = snap.climateNum;
+
+    this.mapContainer.sort('y');
+    this.updateClimateScore?.();
+    updateAllRoadPatterns?.(this);
+    fixBeachTileFrames?.(this);
+
+    this.addTileListeners?.();
+}
+
+// Extend undoState to push snapshot onto redo stack (additions only)
 undoStateDuplicate() {
-    console.warn("undoStateDuplicate is deprecated");
+    // store current view in redo stack before moving back
+    if (this._redo && typeof this.__captureSnapshot === 'function') {
+        this._redo.push(this.__captureSnapshot());
+    }
+    // ... existing code ...
 }
 
 /* ─────── end HISTORY helpers ─────── */
 
+showNewspaper(headline, bodyLines) {
+    // Pause gameplay and launch the overlay scene
+    this.scene.pause();
+    this.scene.launch('newspaper', {
+        headline,
+        bodyLines,
+        onClose: () => {
+            this.scene.resume();
+        },
+    });
+}
 }
