@@ -26,16 +26,14 @@ export class TileInteractionManager {
      * Add all event listeners to a tile (hover, click, out)
      */
     addListenerToTile(tile) {
-        // Clear any previous listeners FIRST
-        tile.removeAllListeners();
-
-        // Register tile with TileTypesManager for base hover interactions
+        // Register tile with TileTypesManager for base hover interactions FIRST
         const tileIndex = this.scene.mapTiles.indexOf(tile);
         if (tileIndex !== -1 && this.scene.tileTypesManager) {
             this.scene.tileTypesManager.registerTile(tile, tileIndex);
         }
 
         // Add TileInteractionManager listeners
+        // Note: TileTypesManager already added its listeners, so these stack on top
         tile.on('pointerover', (pointer) => this.handlePointerOver(tile, pointer));
         tile.on('pointerdown', (pointer) => this.handlePointerDown(tile, pointer));
         tile.on('pointerout', (pointer) => this.handlePointerOut(tile, pointer));
