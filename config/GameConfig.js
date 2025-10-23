@@ -2,7 +2,7 @@
 
 export const GameConfig = {
     // Backend Configuration
-    backendBaseUrl: "http://localhost:8801",
+    backendBaseUrl: "http://localhost:8800",
 
     // Sprite and Tile Dimensions
     spriteWidth: 32,

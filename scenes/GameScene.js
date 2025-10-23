@@ -21,7 +21,7 @@ import { fixBeachTileFrames } from "../helpers/tileUtils.js";
 import { CitySimulation } from "../simulation/CitySimulation.js";
 import { EconomySimulation } from "../simulation/EconomySimulation.js";
 
-const backendBaseUrl = "http://localhost:8801";
+const backendBaseUrl = "http://localhost:8800";
 
 const spriteWidth = 32;
 const spriteHeight = spriteWidth / 2;
