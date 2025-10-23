@@ -895,6 +895,15 @@ export class TileInteractionManager {
         // This allows moving to a new tile while previous animation is running
         this.clearClusterPreviewTimeouts();
 
+        // Clear tints from previous cluster before showing new one
+        if (this.tileArray && this.tileArray.length > 0) {
+            this.tileArray.forEach(t => {
+                if (t && typeof t.clearTint === 'function') {
+                    t.clearTint();
+                }
+            });
+        }
+
         // Check if upgrade exists for this tile
         if (!this.scene.textures.exists(upgradedTileType)) {
             // Show red tint for non-upgradeable tile
