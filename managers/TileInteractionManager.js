@@ -410,30 +410,25 @@ export class TileInteractionManager {
     canPlaceTile(tile0) {
         const currentTexture = this.mapTexArray[0];
 
-        // UPGRADE MODE - check if tile can be upgraded OR placed
+        // UPGRADE MODE - check if tile can be upgraded (doesn't require greenery!)
         if (this.scene.gameState.upgrade) {
-            // If we have a newTile (hybrid mode like Solar), skip upgrade check for placement tiles
-            // Just fall through to standard placement validation
-            if (this.scene.gameState.newTile) {
-                // Check if upgrade exists for this tile
-                const currentTileType = currentTexture;
-                const upgradedTileType = `${currentTileType}_${this.scene.gameState.upgrade}`;
-                const upgradeExists = this.scene.textures.exists(upgradedTileType);
+            // Check if upgrade exists for this tile
+            const currentTileType = currentTexture;
+            const upgradedTileType = `${currentTileType}_${this.scene.gameState.upgrade}`;
+            const upgradeExists = this.scene.textures.exists(upgradedTileType);
 
-                // If upgrade exists, show green (can upgrade)
-                if (upgradeExists) return true;
+            // If upgrade exists, show green (can upgrade)
+            if (upgradeExists) return true;
 
-                // If upgrade doesn't exist, fall through to check if we can place newTile
-            } else {
-                // Pure upgrade mode (no placement) - only allow if upgrade sprite exists
-                const currentTileType = currentTexture;
-                const upgradedTileType = `${currentTileType}_${this.scene.gameState.upgrade}`;
-                const upgradeExists = this.scene.textures.exists(upgradedTileType);
-                return upgradeExists;
+            // If upgrade doesn't exist but we have newTile (hybrid mode), check placement rules below
+            if (!this.scene.gameState.newTile) {
+                // Pure upgrade mode with no newTile - can't place anything
+                return false;
             }
+            // Otherwise fall through to standard placement validation for newTile
         }
 
-        // HARD RULE: Check if tile is in greenery category (for ALL build modes except destroy)
+        // HARD RULE: Check if tile is in greenery category (for ALL build modes except destroy/upgrade)
         const landUse = this.scene.mapArray[tile0];
         const isGreenery = this.scene.tileTypesManager &&
                           this.scene.tileTypesManager.getTileCategory(landUse) === 'greenery';
