@@ -83,9 +83,8 @@ export class TileInteractionManager {
         }
 
         // Check if 'A' key is held and we're in upgrade mode - show cluster preview
-        console.log(`🔍 Hover check - A held: ${this.scene.inputManager?.isAKeyHeld}, upgrade: ${this.scene.gameState.upgrade}`);
         if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld && this.scene.gameState.upgrade) {
-            console.log(`✅ Conditions met - calling showClusterPreview`);
+            console.log(`✅ A + Solar hover - showing cluster preview`);
             this.showClusterPreview(tile);
             return;
         }
@@ -894,18 +893,9 @@ export class TileInteractionManager {
 
         console.log(`👁️ showClusterPreview called for ${currentTileType}`);
 
-        // ALWAYS clear existing preview first (even if animating)
+        // Cancel any existing preview animation
         // This allows moving to a new tile while previous animation is running
         this.clearClusterPreviewTimeouts();
-
-        // Clear tints from previous hover
-        if (this.tileArray && this.tileArray.length > 0) {
-            this.tileArray.forEach(t => {
-                if (t && typeof t.clearTint === 'function') {
-                    t.clearTint();
-                }
-            });
-        }
 
         // Check if upgrade exists for this tile
         if (!this.scene.textures.exists(upgradedTileType)) {
@@ -959,7 +949,7 @@ export class TileInteractionManager {
             this.clusterPreviewTimeouts.push(timeoutId);
         });
 
-        // Store in tileArray for cleanup
+        // Store in tileArray for cleanup by handlePointerOut
         this.tileArray = cluster;
     }
 
