@@ -24,6 +24,10 @@ export class GameState {
         this.wind = false;
         this.solar = false;
 
+        // Upgrade modes
+        this.upgrade = null;  // e.g., 'solar' for upgrading tiles
+        this.clusterUpgrade = null;  // For cluster upgrade mode
+
         // Tile placement state
         this.placeTile = false;
         this.newTile = null;
@@ -54,6 +58,8 @@ export class GameState {
         this.trees = false;
         this.wind = false;
         this.solar = false;
+        this.upgrade = null;
+        this.clusterUpgrade = null;
         this.placeTile = false;
         this.newTile = null;
         this.frameNumber = 0;
