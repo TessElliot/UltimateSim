@@ -888,25 +888,31 @@ export class TileInteractionManager {
      * Show cluster preview with green tint in spiral pattern (while 'A' is held)
      */
     showClusterPreview(tile) {
-        // Skip if already animating (like TileTypesManager does)
-        if (this.isPreviewAnimating) {
-            return;
-        }
-
         const currentTileType = tile.texture.key;
         const upgradeType = this.scene.gameState.upgrade;
         const upgradedTileType = `${currentTileType}_${upgradeType}`;
 
         console.log(`👁️ showClusterPreview called for ${currentTileType}`);
 
-        // Clear any existing preview animation first
+        // ALWAYS clear existing preview first (even if animating)
+        // This allows moving to a new tile while previous animation is running
         this.clearClusterPreviewTimeouts();
+
+        // Clear tints from previous hover
+        if (this.tileArray && this.tileArray.length > 0) {
+            this.tileArray.forEach(t => {
+                if (t && typeof t.clearTint === 'function') {
+                    t.clearTint();
+                }
+            });
+        }
 
         // Check if upgrade exists for this tile
         if (!this.scene.textures.exists(upgradedTileType)) {
             // Show red tint for non-upgradeable tile
-            console.log(`❌ No upgrade: ${upgradedTileType} - showing red tint`);
+            console.log(`❌ No upgrade: ${upgradedTileType} - showing red tint on tile at (${tile.x}, ${tile.y})`);
             tile.setTint(0xff0000);
+            console.log(`🔴 Applied RED tint to ${currentTileType} at (${tile.x}, ${tile.y})`);
             this.tileArray = [tile];
             return;
         }
@@ -930,17 +936,22 @@ export class TileInteractionManager {
             return distA - distB;
         });
 
+        console.log(`🌀 Starting spiral tint animation for ${spiralOrder.length} tiles from hovered tile at (${tile.x}, ${tile.y})`);
+
         // Show green tint on all tiles in cluster in spiral pattern
         const delayPerTile = 10; // Same as TileTypesManager
         spiralOrder.forEach((clusterTile, orderIndex) => {
             const timeoutId = setTimeout(() => {
                 if (clusterTile && typeof clusterTile.setTint === 'function') {
+                    const tileIndex = this.scene.mapTiles.indexOf(clusterTile);
                     clusterTile.setTint(0x00ff00);
+                    console.log(`🟢 [${orderIndex + 1}/${spiralOrder.length}] Applied GREEN tint to ${clusterTile.texture.key} at (${clusterTile.x}, ${clusterTile.y}) - mapTiles[${tileIndex}]`);
                 }
 
                 // Release lock when last tile is tinted
                 if (orderIndex === spiralOrder.length - 1) {
                     this.isPreviewAnimating = false;
+                    console.log(`✅ Spiral animation complete - lock released`);
                 }
             }, orderIndex * delayPerTile);
 
