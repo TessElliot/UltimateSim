@@ -68,6 +68,8 @@ export class TileInteractionManager {
 
         // Check if any build tool is active
         const hasActiveTool = this.scene.gameState.destroy ||
+                             this.scene.gameState.road ||
+                             this.scene.gameState.bike ||
                              this.scene.gameState.wind ||
                              this.scene.gameState.solar ||
                              this.scene.gameState.trees ||
@@ -75,8 +77,11 @@ export class TileInteractionManager {
                              this.scene.gameState.mediumTile ||
                              this.scene.gameState.largeTile;
 
+        console.log(`🔍 Hover - hasActiveTool: ${hasActiveTool}, solar: ${this.scene.gameState.solar}, upgrade: ${this.scene.gameState.upgrade}, tile: ${tile.texture.key}`);
+
         // Only show placement feedback if a tool is active
         if (!hasActiveTool) {
+            console.log(`❌ No active tool - returning`);
             return; // Let base category tinting handle this
         }
 
@@ -87,6 +92,8 @@ export class TileInteractionManager {
             return;
         }
 
+        console.log(`📍 Proceeding to validation for ${tile.texture.key}`);
+
         // Calculate affected tiles based on tile size
         const tilePosArray = this.calculateAffectedTilePositions(pX, pY);
 
@@ -94,6 +101,8 @@ export class TileInteractionManager {
         const affectedTiles = this.getAffectedTiles(tilePosArray);
         this.tileArray = affectedTiles.tiles;
         this.mapTexArray = affectedTiles.textures;
+
+        console.log(`🎯 tileArray length: ${this.tileArray.length}, mapTexArray: ${this.mapTexArray}`);
 
         // Validate placement and show tint feedback
         this.validateAndShowPlacementFeedback(tile0);
@@ -103,6 +112,8 @@ export class TileInteractionManager {
      * POINTERDOWN - Actually place the tile
      */
     handlePointerDown(tile, pointer) {
+        console.log(`🎯 TileInteractionManager.handlePointerDown CALLED - tile: ${tile.texture.key}, destroy: ${this.scene.gameState.destroy}, placeTile: ${this.scene.gameState.placeTile}`);
+
         const pX = tile.x;
         const pY = tile.y;
 
