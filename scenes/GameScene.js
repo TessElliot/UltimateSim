@@ -21,8 +21,6 @@ import { fixBeachTileFrames } from "../helpers/tileUtils.js";
 import { CitySimulation } from "../simulation/CitySimulation.js";
 import { EconomySimulation } from "../simulation/EconomySimulation.js";
 
-console.log('🚀🚀🚀 GameScene.js FILE LOADED - VERSION 2025-FINAL 🚀🚀🚀');
-
 const backendBaseUrl = "http://localhost:8801";
 
 const spriteWidth = 32;
@@ -151,7 +149,25 @@ export class GameScene extends Phaser.Scene {
         //MAIN CAMERA:
 
         const camGame = this.cameras.main;
-        camGame.setZoom(8);
+
+        // Check if there's a saved map with >= 900 tiles to determine initial zoom
+        let initialZoom = 8;
+        let initialBackgroundScale = 0.5;
+        const savedMapString = localStorage.getItem("savedMap");
+        if (savedMapString) {
+            try {
+                const savedData = JSON.parse(savedMapString);
+                if (savedData && savedData.tiles && savedData.tiles.length >= 900) {
+                    initialZoom = 4;
+                    initialBackgroundScale = 1;
+                    console.log(`📏 Large saved map detected (${savedData.tiles.length} tiles) - using zoom 4`);
+                }
+            } catch (e) {
+                console.warn('Could not parse saved map for zoom calculation:', e);
+            }
+        }
+
+        camGame.setZoom(initialZoom);
         camGame.setBounds(0, 0, gWidth, gHeight);
 
         //BACKGROUND:
@@ -161,7 +177,7 @@ export class GameScene extends Phaser.Scene {
         });
         const Background = new Phaser.Geom.Rectangle(0, 0, 1000, 550);
         this.bkgd = this.add.image(500, 300, "background_image");
-        this.bkgd.setScale(0.5); // Scale 0.5 for initial zoom 8 (zoom 4 = scale 1, zoom 8 = scale 0.5)
+        this.bkgd.setScale(initialBackgroundScale); // Scale based on zoom (zoom 4 = scale 1, zoom 8 = scale 0.5)
         this.bkgd.setTint(0x4e2e22);
         this.backgroundImage = this.bkgd;
         this.bkgdProcessing = this.add.image(500, 300, "background_image");
@@ -285,7 +301,6 @@ export class GameScene extends Phaser.Scene {
         if (this.textLoad && this.textLoad.active) {
             this.textLoad.destroy();
         }
-        isLoading = false;
 
         //change starting camera zoom
         if (mapTilesWidth >= 20) {
@@ -312,12 +327,7 @@ export class GameScene extends Phaser.Scene {
         // Track medium-tile orientation (0-3)
         this.rotationStep = 0;
 
-        // MAP INTERACTIVITIY:
-        // (see TileArrayTempate.png for tile numbers)
         this.addTileListeners();
-
-        ///UISCENE (already created before map loading - line 210)
-        // this.inputManager.initialize(this.emitter); // Already done at line 223
 
         if (this.buildingDropdown) {
             this.add.existing(this.buildingDropdown);
@@ -1786,12 +1796,13 @@ export class GameScene extends Phaser.Scene {
             // POINTERDOWN LISTENER
             // ===================================================================
             tile.on("pointerdown", function (pointer) {
+                // Delegate to TileInteractionManager for modern tool handling
+                scene.tileInteractionManager.handlePointerDown(this, pointer);
+
                 const xx = `${this.gridX}_${this.gridY}`;
                 const tileKey = gridToTileKey.get(`${this.gridX}_${this.gridY}`);
 
                 const landUseData = landUseInfo.get(tileKey);
-
-                console.log("Land data:", landUseData);
 
                 const pX = this.x;
                 const pY = this.y;
@@ -1898,14 +1909,10 @@ export class GameScene extends Phaser.Scene {
                     });
                 }
 
-                console.log(`🎯 Tile clicked. placeTile: ${scene.gameState.placeTile}, texture: ${this.texture.key}, destroy: ${scene.gameState.destroy}, newTile: ${scene.gameState.newTile}`);
-
                 // Check each condition individually
                 const canPlace = scene.gameState.placeTile && this.texture.key !== "road" && !scene.gameState.destroy;
-                console.log(`🔍 Placement check - placeTile: ${scene.gameState.placeTile}, notRoad: ${this.texture.key !== "road"}, notDestroy: ${!scene.gameState.destroy}, canPlace: ${canPlace}`);
 
                 if (scene.gameState.placeTile && this.texture.key !== "road" && !scene.gameState.destroy) {
-                    console.log(`🔨 Placing tile: ${scene.gameState.newTile}`);
                     if (tileArray[0] && typeof tileArray[0].setTexture === 'function') {
                         tileArray[0].setTexture(scene.gameState.newTile, scene.gameState.frameNumber);
                     }
@@ -1954,7 +1961,6 @@ export class GameScene extends Phaser.Scene {
                                     tile.play({ key: scene.gameState.newTile, randomFrame: true });
                                 } else {
                                     tile.anims.stop();
-                                    console.log("Tile animation not found: " + scene.gameState.newTile);
                                 }
                             } else {
                                 tile.setTexture("null");
@@ -2006,8 +2012,6 @@ export class GameScene extends Phaser.Scene {
                                     scene.tileChanges.push({ id: tileId, newTileType: "null" });
                                 }
                             }
-                            console.log(tileId, newTileType);
-                            console.log(scene.tileChanges);
                         });
 
                         const centerTile = tileArray[1];
@@ -2033,13 +2037,10 @@ export class GameScene extends Phaser.Scene {
                             }
 
                             // Auto-save removed - use explicit Save button instead
-                            console.log("Setting texture and origin for the medium tile.");
-
                             centerTile.setTexture(scene.gameState.newTile);
                             centerTile.setOrigin(0.25, 0.47);
 
                             if (scene.anims.exists(scene.gameState.newTile)) {
-                                console.log("Playing animation for medium tile:", scene.gameState.newTile);
                                 centerTile.play({ key: scene.gameState.newTile, randomFrame: true });
                             } else {
                             }
@@ -2080,7 +2081,6 @@ export class GameScene extends Phaser.Scene {
                     if (currentSpriteWidth == 96) {
                         for (let i = 0; i < tilePosArray.length; i++) {
                             let checkForNull = scene.mapTilesPos.indexOf(tilePosArray[i]);
-                            console.log(checkForNull);
 
                             scene.mapTiles[checkForNull].play("bulldozing");
                             scene.mapTiles[checkForNull].setTexture("ground");
@@ -2089,8 +2089,6 @@ export class GameScene extends Phaser.Scene {
                     } else if (currentSpriteWidth == 64) {
                         for (let i = 0; i < 4; i++) {
                             let checkForNull = scene.mapTilesPos.indexOf(tilePosArray[i]);
-
-                            console.log(checkForNull);
 
                             scene.mapTiles[checkForNull].play("bulldozing");
                             scene.mapTiles[checkForNull].setTexture("ground");
@@ -2103,8 +2101,6 @@ export class GameScene extends Phaser.Scene {
                     newTileType = "bike";
                 } else {
                 }
-
-                console.log(id, newTileType);
 
                 if (newTileType !== null && id !== undefined) {
                     const tileIndex = scene.mapTiles.indexOf(this);
@@ -2121,8 +2117,6 @@ export class GameScene extends Phaser.Scene {
                     } else {
                         scene.tileChanges.push({ id, newTileType });
                     }
-
-                    console.log("Tile changes updated:", scene.tileChanges);
 
                     // Auto-save removed - use explicit Save button instead
                 }

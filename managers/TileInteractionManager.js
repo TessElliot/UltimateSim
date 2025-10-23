@@ -16,6 +16,10 @@ export class TileInteractionManager {
         // Local state for hover/click interactions
         this.tileArray = [];
         this.mapTexArray = [];
+
+        // Cluster preview animation state
+        this.clusterPreviewTimeouts = [];
+        this.isPreviewAnimating = false;
     }
 
     /**
@@ -69,12 +73,21 @@ export class TileInteractionManager {
                              this.scene.gameState.wind ||
                              this.scene.gameState.solar ||
                              this.scene.gameState.trees ||
+                             this.scene.gameState.upgrade ||
                              this.scene.gameState.mediumTile ||
                              this.scene.gameState.largeTile;
 
         // Only show placement feedback if a tool is active
         if (!hasActiveTool) {
             return; // Let base category tinting handle this
+        }
+
+        // Check if 'A' key is held and we're in upgrade mode - show cluster preview
+        console.log(`🔍 Hover check - A held: ${this.scene.inputManager?.isAKeyHeld}, upgrade: ${this.scene.gameState.upgrade}`);
+        if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld && this.scene.gameState.upgrade) {
+            console.log(`✅ Conditions met - calling showClusterPreview`);
+            this.showClusterPreview(tile);
+            return;
         }
 
         // Calculate affected tiles based on tile size
@@ -99,7 +112,6 @@ export class TileInteractionManager {
         // Log land use data
         const tileKey = this.gridToTileKey.get(`${tile.gridX}_${tile.gridY}`);
         const landUseData = landUseInfo.get(tileKey);
-        console.log("Land data:", landUseData);
 
         // Calculate surrounding tiles
         const tilePosArray = this.calculateSurroundingTilePositions(pX, pY);
@@ -112,25 +124,31 @@ export class TileInteractionManager {
         const id = tile.id;
         let newTileType = null;
 
-        // Debug: Show state before early return check
-        console.log(`🔍 handlePointerDown - placeTile: ${this.scene.gameState.placeTile}, destroy: ${this.scene.gameState.destroy}, road: ${this.scene.gameState.road}, tile texture: ${tile.texture.key}`);
-
         // Early return if in move mode - let scene handle map dragging
         if (this.scene.gameState.moveBool) {
-            console.log('🚫 Early return: moveBool is true (move mode active)');
             return;
         }
 
         // Early return if placement not allowed
         if (this.scene.gameState.placeTile === false) {
-            console.log('❌ Early return: placeTile is false');
             return;
         }
 
         // Handle different placement modes
-        console.log(`🔀 Checking placement mode - road: ${this.scene.gameState.road}, placeTile: ${this.scene.gameState.placeTile}, destroy: ${this.scene.gameState.destroy}`);
+        // Check if 'A' is held + upgrade mode = cluster upgrade
+        if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld && this.scene.gameState.upgrade) {
+            console.log(`🔑 A + Click: Cluster upgrade mode`);
+            newTileType = this.upgradeCluster(tile, this.scene.gameState.upgrade);
+        } else if (this.scene.gameState.upgrade) {
+            console.log(`⬆️ Upgrade mode: ${this.scene.gameState.upgrade}`);
+            newTileType = this.upgradeTile(tile, tile0, this.scene.gameState.upgrade);
 
-        if (this.scene.gameState.road) {
+            // If upgrade failed but we have newTile (hybrid mode), try standard placement
+            if (newTileType === null && this.scene.gameState.newTile) {
+                console.log(`ℹ️ Upgrade failed, falling back to placement of ${this.scene.gameState.newTile}`);
+                newTileType = this.placeTile(tile, tile0, tileaArray);
+            }
+        } else if (this.scene.gameState.road) {
             console.log('🛣️ Road mode');
             newTileType = this.placeRoad(tile, tileaArray);
         } else if (this.scene.gameState.placeTile && tile.texture.key !== "road" && !this.scene.gameState.destroy) {
@@ -192,6 +210,11 @@ export class TileInteractionManager {
      * POINTEROUT - Clear hover effects
      */
     handlePointerOut(tile, pointer) {
+        // Don't clear tints if 'A' is held (cluster preview mode)
+        if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld) {
+            return; // Keep cluster preview tints visible
+        }
+
         // Filter valid tiles
         this.tileArray = this.tileArray.filter(t => t && typeof t.clearTint === 'function');
 
@@ -371,7 +394,6 @@ export class TileInteractionManager {
         const canPlace = this.canPlaceTile(tile0);
 
         // Set placeTile based on validation
-        // This determines if clicking will place a tile
         this.scene.gameState.placeTile = canPlace;
 
         // Show visual feedback
@@ -390,6 +412,29 @@ export class TileInteractionManager {
      */
     canPlaceTile(tile0) {
         const currentTexture = this.mapTexArray[0];
+
+        // UPGRADE MODE - check if tile can be upgraded OR placed
+        if (this.scene.gameState.upgrade) {
+            // If we have a newTile (hybrid mode like Solar), skip upgrade check for placement tiles
+            // Just fall through to standard placement validation
+            if (this.scene.gameState.newTile) {
+                // Check if upgrade exists for this tile
+                const currentTileType = currentTexture;
+                const upgradedTileType = `${currentTileType}_${this.scene.gameState.upgrade}`;
+                const upgradeExists = this.scene.textures.exists(upgradedTileType);
+
+                // If upgrade exists, show green (can upgrade)
+                if (upgradeExists) return true;
+
+                // If upgrade doesn't exist, fall through to check if we can place newTile
+            } else {
+                // Pure upgrade mode (no placement) - only allow if upgrade sprite exists
+                const currentTileType = currentTexture;
+                const upgradedTileType = `${currentTileType}_${this.scene.gameState.upgrade}`;
+                const upgradeExists = this.scene.textures.exists(upgradedTileType);
+                return upgradeExists;
+            }
+        }
 
         // HARD RULE: Check if tile is in greenery category (for ALL build modes except destroy)
         const landUse = this.scene.mapArray[tile0];
@@ -509,11 +554,20 @@ export class TileInteractionManager {
         // Single-tile placement - set texture on sprite array
         if (this.tileArray[0] && typeof this.tileArray[0].setTexture === 'function') {
             this.tileArray[0].setTexture(this.scene.gameState.newTile, this.scene.gameState.frameNumber);
+            // Clear the green tint from hover validation
+            if (typeof this.tileArray[0].clearTint === 'function') {
+                this.tileArray[0].clearTint();
+            }
         }
 
         // Update map tiles
         this.scene.mapTiles[tile0].setTexture(this.scene.gameState.newTile, 0);
         this.scene.mapArray[tile0] = this.scene.gameState.newTile;
+
+        // Clear the green tint from hover validation
+        if (typeof this.scene.mapTiles[tile0].clearTint === 'function') {
+            this.scene.mapTiles[tile0].clearTint();
+        }
 
         // Play animation if exists
         if (this.scene.anims.exists(this.scene.gameState.newTile)) {
@@ -699,6 +753,313 @@ export class TileInteractionManager {
         }
 
         return "ground";
+    }
+
+    /**
+     * Upgrade a tile to its upgraded variant (e.g., neighborhood -> neighborhood_solar)
+     */
+    upgradeTile(tile, tile0, upgradeType) {
+        const currentTileType = tile.texture.key;
+        const upgradedTileType = `${currentTileType}_${upgradeType}`;
+
+        console.log(`⬆️ Attempting to upgrade: ${currentTileType} -> ${upgradedTileType}`);
+
+        // Check if the upgraded texture exists (e.g., house_solar, detached_solar)
+        if (!this.scene.textures.exists(upgradedTileType)) {
+            console.log(`ℹ️ No upgrade available for ${currentTileType}, will use standard placement instead`);
+            return null;  // Let standard placement handle it
+        }
+
+        // Update the tile texture
+        tile.setTexture(upgradedTileType, 0);
+        this.scene.mapArray[tile0] = upgradedTileType;
+
+        // Clear any tint
+        if (typeof tile.clearTint === 'function') {
+            tile.clearTint();
+        }
+
+        // Play animation if exists
+        if (this.scene.anims.exists(upgradedTileType)) {
+            tile.play({ key: upgradedTileType, randomFrame: true });
+        } else {
+            tile.anims.stop();
+        }
+
+        console.log(`✅ Upgraded to: ${upgradedTileType}`);
+
+        // Emit tile placed event
+        this.scene.emitter.emit('TILE_PLACED', {
+            oldTileType: currentTileType,
+            newTileType: upgradedTileType
+        });
+
+        return upgradedTileType;
+    }
+
+    /**
+     * Upgrade an entire cluster of connected tiles in spiral pattern
+     */
+    upgradeCluster(clickedTile, upgradeType) {
+        const currentTileType = clickedTile.texture.key;
+        const upgradedTileType = `${currentTileType}_${upgradeType}`;
+
+        console.log(`🌀 Clicked tile type: ${currentTileType}`);
+
+        // Check if the upgraded texture exists
+        if (!this.scene.textures.exists(upgradedTileType)) {
+            console.warn(`❌ Upgrade texture not found: ${upgradedTileType}`);
+            return null;
+        }
+
+        // Find all connected tiles of the same type using flood-fill
+        const cluster = this.findConnectedTilesOfSameType(clickedTile, currentTileType);
+
+        console.log(`✨ Found cluster of ${cluster.length} connected ${currentTileType} tiles`);
+
+        // Find center of cluster for spiral animation
+        const centerTile = this.findClusterCenter(cluster);
+
+        // Apply upgrade in spiral pattern
+        this.applyClusterUpgradeInSpiral(cluster, centerTile, upgradeType);
+
+        // Return null because we're handling multiple tiles asynchronously
+        return null;
+    }
+
+    /**
+     * Find all tiles connected to the start tile with the same type
+     */
+    findConnectedTilesOfSameType(startTile, tileType) {
+        const visited = new Set();
+        const cluster = [];
+        const queue = [startTile];
+
+        while (queue.length > 0) {
+            const currentTile = queue.shift();
+            const currentIndex = this.scene.mapTiles.indexOf(currentTile);
+
+            if (visited.has(currentIndex)) continue;
+            if (currentTile.texture.key !== tileType) continue;
+
+            visited.add(currentIndex);
+            cluster.push(currentTile);
+
+            // Find adjacent tiles (4-directional)
+            const neighbors = this.scene.mapTiles.filter(tile => {
+                const dx = Math.abs(tile.x - currentTile.x);
+                const dy = Math.abs(tile.y - currentTile.y);
+                return (dx === 32 && dy === 0) || (dx === 0 && dy === 32);
+            });
+
+            // Add unvisited neighbors of same type to queue
+            for (const neighbor of neighbors) {
+                const neighborIndex = this.scene.mapTiles.indexOf(neighbor);
+                if (!visited.has(neighborIndex) && neighbor.texture.key === tileType) {
+                    queue.push(neighbor);
+                }
+            }
+        }
+
+        return cluster;
+    }
+
+    /**
+     * Find the center tile of a cluster
+     */
+    findClusterCenter(tiles) {
+        if (tiles.length === 0) return null;
+
+        const avgX = tiles.reduce((sum, t) => sum + t.x, 0) / tiles.length;
+        const avgY = tiles.reduce((sum, t) => sum + t.y, 0) / tiles.length;
+
+        return tiles.reduce((closest, tile) => {
+            const distCurrent = Math.sqrt(
+                Math.pow(tile.x - avgX, 2) + Math.pow(tile.y - avgY, 2)
+            );
+            const distClosest = Math.sqrt(
+                Math.pow(closest.x - avgX, 2) + Math.pow(closest.y - avgY, 2)
+            );
+            return distCurrent < distClosest ? tile : closest;
+        });
+    }
+
+    /**
+     * Show cluster preview with green tint in spiral pattern (while 'A' is held)
+     */
+    showClusterPreview(tile) {
+        // Skip if already animating (like TileTypesManager does)
+        if (this.isPreviewAnimating) {
+            return;
+        }
+
+        const currentTileType = tile.texture.key;
+        const upgradeType = this.scene.gameState.upgrade;
+        const upgradedTileType = `${currentTileType}_${upgradeType}`;
+
+        console.log(`👁️ showClusterPreview called for ${currentTileType}`);
+
+        // Clear any existing preview animation first
+        this.clearClusterPreviewTimeouts();
+
+        // Check if upgrade exists for this tile
+        if (!this.scene.textures.exists(upgradedTileType)) {
+            // Show red tint for non-upgradeable tile
+            console.log(`❌ No upgrade: ${upgradedTileType} - showing red tint`);
+            tile.setTint(0xff0000);
+            this.tileArray = [tile];
+            return;
+        }
+
+        // Find cluster of connected tiles
+        const cluster = this.findConnectedTilesOfSameType(tile, currentTileType);
+
+        console.log(`✨ Found cluster of ${cluster.length} tiles for preview`);
+
+        // Set animation lock
+        this.isPreviewAnimating = true;
+
+        // Sort tiles in spiral order from hovered tile (not center)
+        const spiralOrder = [...cluster].sort((a, b) => {
+            const distA = Math.sqrt(
+                Math.pow(a.x - tile.x, 2) + Math.pow(a.y - tile.y, 2)
+            );
+            const distB = Math.sqrt(
+                Math.pow(b.x - tile.x, 2) + Math.pow(b.y - tile.y, 2)
+            );
+            return distA - distB;
+        });
+
+        // Show green tint on all tiles in cluster in spiral pattern
+        const delayPerTile = 10; // Same as TileTypesManager
+        spiralOrder.forEach((clusterTile, orderIndex) => {
+            const timeoutId = setTimeout(() => {
+                if (clusterTile && typeof clusterTile.setTint === 'function') {
+                    clusterTile.setTint(0x00ff00);
+                }
+
+                // Release lock when last tile is tinted
+                if (orderIndex === spiralOrder.length - 1) {
+                    this.isPreviewAnimating = false;
+                }
+            }, orderIndex * delayPerTile);
+
+            // Store timeout ID for potential cancellation
+            this.clusterPreviewTimeouts.push(timeoutId);
+        });
+
+        // Store in tileArray for cleanup
+        this.tileArray = cluster;
+    }
+
+    /**
+     * Clear all cluster preview animation timeouts
+     */
+    clearClusterPreviewTimeouts() {
+        this.clusterPreviewTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+        this.clusterPreviewTimeouts = [];
+        this.isPreviewAnimating = false;
+    }
+
+    /**
+     * Apply upgrade to cluster in spiral pattern from center
+     */
+    applyClusterUpgradeInSpiral(tiles, centerTile, upgradeType) {
+        if (!tiles || tiles.length === 0) return;
+
+        // Sort tiles by distance from center (spiral outward)
+        const spiralOrder = [...tiles].sort((a, b) => {
+            const distA = Math.sqrt(
+                Math.pow(a.x - centerTile.x, 2) + Math.pow(a.y - centerTile.y, 2)
+            );
+            const distB = Math.sqrt(
+                Math.pow(b.x - centerTile.x, 2) + Math.pow(b.y - centerTile.y, 2)
+            );
+            return distA - distB;
+        });
+
+        // Apply upgrades in spiral order with delay
+        const delayPerTile = 15;
+        let upgradeCount = 0;
+
+        spiralOrder.forEach((tile, orderIndex) => {
+            setTimeout(() => {
+                const currentType = tile.texture.key;
+                const solarType = `${currentType}_${upgradeType}`;
+
+                if (this.scene.textures.exists(solarType)) {
+                    console.log(`🔧 BEFORE: tile.texture.key = "${tile.texture.key}"`);
+
+                    // Update texture
+                    tile.setTexture(solarType, 0);
+
+                    console.log(`🔧 AFTER setTexture: tile.texture.key = "${tile.texture.key}"`);
+
+                    // Update mapArray
+                    const tileIndex = this.scene.mapTiles.indexOf(tile);
+                    if (tileIndex !== -1) {
+                        console.log(`🔧 Updating mapArray[${tileIndex}] from "${this.scene.mapArray[tileIndex]}" to "${solarType}"`);
+                        this.scene.mapArray[tileIndex] = solarType;
+                        console.log(`🔧 Confirmed: mapArray[${tileIndex}] = "${this.scene.mapArray[tileIndex]}"`);
+                    }
+
+                    // Clear tint
+                    if (typeof tile.clearTint === 'function') {
+                        tile.clearTint();
+                    }
+
+                    // Play animation if exists
+                    if (this.scene.anims.exists(solarType)) {
+                        console.log(`🎬 Playing animation: "${solarType}"`);
+                        tile.play({ key: solarType, randomFrame: true });
+                        console.log(`🎬 Animation status: ${tile.anims.isPlaying ? 'PLAYING' : 'NOT PLAYING'}, current anim: "${tile.anims.currentAnim ? tile.anims.currentAnim.key : 'none'}"`);
+                    } else {
+                        console.log(`⚠️ No animation found for "${solarType}"`);
+                        tile.anims.stop();
+                    }
+
+                    // Update tile changes for saving
+                    if (tile.id !== undefined) {
+                        const changeIndex = this.scene.tileChanges.findIndex(t => t.id === tile.id);
+                        if (changeIndex !== -1) {
+                            this.scene.tileChanges[changeIndex].newTileType = solarType;
+                        } else {
+                            this.scene.tileChanges.push({ id: tile.id, newTileType: solarType });
+                        }
+                    }
+
+                    // Re-register with TileTypesManager to update category arrays
+                    if (this.scene.tileTypesManager && tileIndex !== -1) {
+                        console.log(`🔄 Re-registering tile ${tileIndex} with TileTypesManager`);
+                        this.scene.tileTypesManager.registerTile(tile, tileIndex);
+                    }
+
+                    upgradeCount++;
+                    console.log(`☀️ Upgraded ${currentType} -> ${solarType} (${upgradeCount}/${spiralOrder.length})`);
+                }
+
+                // On last tile, update simulation and save state
+                if (orderIndex === spiralOrder.length - 1) {
+                    console.log(`✅ Cluster upgrade complete! ${upgradeCount} tiles upgraded`);
+
+                    // Update city simulation
+                    if (this.scene.citySim) {
+                        this.scene.citySim.immediateUpdate();
+                    }
+
+                    // Save state for undo/redo
+                    if (!this.scene.isLoadingMap) {
+                        this.scene.saveState();
+                    }
+
+                    // Emit event for all upgrades
+                    this.scene.emitter.emit('TILE_PLACED', {
+                        oldTileType: currentType,
+                        newTileType: solarType
+                    });
+                }
+            }, orderIndex * delayPerTile);
+        });
     }
 
     /**

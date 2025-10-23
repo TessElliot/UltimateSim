@@ -6,6 +6,9 @@ export class InputManager {
         this.scene = scene;
         this.emitter = null;
 
+        // Track if 'A' key is held for cluster preview
+        this.isAKeyHeld = false;
+
         // Store bound methods for proper cleanup
         this.boundHandlers = {
             moveMap: this.handleMoveMap.bind(this),
@@ -138,6 +141,19 @@ export class InputManager {
         // F = Go Home (center)
         keyboard.on('keydown-F', () => this.handleGoHome());
 
+        // A key = Hold to preview cluster, then click to upgrade cluster
+        keyboard.on('keydown-A', () => {
+            // Set flag that A is being held
+            this.isAKeyHeld = true;
+            console.log('🔑 A key pressed - cluster preview mode active');
+        });
+
+        keyboard.on('keyup-A', () => {
+            // Clear flag when A is released
+            this.isAKeyHeld = false;
+            console.log('🔑 A key released - cluster preview mode inactive');
+        });
+
         // D = Bulldoze/Destroy
         keyboard.on('keydown-D', () => this.handleDestroy());
 
@@ -168,15 +184,16 @@ export class InputManager {
     // ============================================
 
     handleBuildSolar() {
-        console.log('🔘 Solar button clicked - calling setTool');
+        console.log('🔘 Solar button clicked - setting hybrid solar mode');
         this.scene.gameState.setTool({
             placeTile: true,
             smallTile: true,
-            newTile: 'power:plant (solar)',
+            newTile: 'power:plant (solar)',  // For placing on ground tiles
+            upgrade: 'solar',  // For upgrading residential tiles
             solar: true,
             frameNumber: 0
         });
-        console.log(`🔘 After setTool - destroy: ${this.scene.gameState.destroy}, newTile: ${this.scene.gameState.newTile}, solar: ${this.scene.gameState.solar}`);
+        console.log(`🔘 Solar mode active - can place power plants on ground OR upgrade residential tiles`);
     }
 
     handleBuildWind() {
@@ -453,6 +470,242 @@ export class InputManager {
     handleSaveGame() {
         console.log("💾 Manual save triggered");
         this.scene.saveGameToLocalStorage();
+    }
+
+    /**
+     * SHIFT + A: Enter cluster upgrade mode - click tiles to upgrade their cluster
+     * Only works if upgrade: 'solar' mode is already active
+     */
+    handleEnterClusterUpgradeMode() {
+        // Check if solar upgrade mode is already active
+        if (this.scene.gameState.upgrade !== 'solar') {
+            console.log('⚠️ SHIFT+A requires Solar upgrade mode to be active first. Click Solar dropdown button first.');
+            return;
+        }
+
+        console.log('☀️ SHIFT+A: Cluster upgrade mode activated - click tiles to upgrade connected cluster');
+        this.scene.gameState.setTool({
+            placeTile: true,
+            upgrade: 'solar',
+            clusterUpgrade: 'solar',
+            solar: true,
+            frameNumber: 0
+        });
+    }
+
+    /**
+     * SHIFT + OPTION + A: Bulk upgrade ALL residential tiles to solar in spiral pattern
+     */
+    handleBulkSolarUpgradeAll() {
+        console.log('☀️ SHIFT+OPTION+A: Bulk solar upgrade ALL triggered');
+
+        // Get all residential tiles that can be upgraded to solar
+        const upgradableTiles = this.scene.mapTiles.filter(tile => {
+            const currentType = tile.texture.key;
+            const solarType = `${currentType}_solar`;
+
+            // Check if solar variant exists
+            return this.scene.textures.exists(solarType);
+        });
+
+        if (upgradableTiles.length === 0) {
+            console.log('⚠️ No upgradable tiles found');
+            return;
+        }
+
+        console.log(`✨ Found ${upgradableTiles.length} upgradable tiles`);
+
+        // Find center of all upgradable tiles
+        const centerTile = this.findCenterTile(upgradableTiles);
+
+        // Use the same spiral pattern as TileTypesManager
+        this.applyUpgradeInSpiral(upgradableTiles, centerTile);
+    }
+
+    /**
+     * Find all connected clusters of upgradable tiles using flood-fill
+     */
+    findUpgradableClusters() {
+        const visited = new Set();
+        const clusters = [];
+
+        // Check each tile to find clusters
+        for (const tile of this.scene.mapTiles) {
+            const tileIndex = this.scene.mapTiles.indexOf(tile);
+            if (visited.has(tileIndex)) continue;
+
+            const currentType = tile.texture.key;
+            const solarType = `${currentType}_solar`;
+
+            // Skip if no solar variant exists
+            if (!this.scene.textures.exists(solarType)) continue;
+
+            // Found an upgradable tile - flood-fill to find all connected tiles of same type
+            const cluster = this.floodFillUpgradableTiles(tile, currentType, visited);
+
+            if (cluster.length > 0) {
+                clusters.push(cluster);
+            }
+        }
+
+        return clusters;
+    }
+
+    /**
+     * Flood-fill algorithm to find all connected tiles of the same type
+     */
+    floodFillUpgradableTiles(startTile, tileType, visited) {
+        const cluster = [];
+        const queue = [startTile];
+        const processedIndices = new Set();
+
+        while (queue.length > 0) {
+            const currentTile = queue.shift();
+            const currentIndex = this.scene.mapTiles.indexOf(currentTile);
+
+            // Skip if already processed
+            if (processedIndices.has(currentIndex) || visited.has(currentIndex)) {
+                continue;
+            }
+
+            // Check if this tile matches the type we're looking for
+            if (currentTile.texture.key !== tileType) {
+                continue;
+            }
+
+            // Mark as visited and add to cluster
+            visited.add(currentIndex);
+            processedIndices.add(currentIndex);
+            cluster.push(currentTile);
+
+            // Find all adjacent tiles (4-directional: up, down, left, right)
+            const neighbors = this.scene.mapTiles.filter(tile => {
+                const dx = Math.abs(tile.x - currentTile.x);
+                const dy = Math.abs(tile.y - currentTile.y);
+
+                // Adjacent if exactly 1 tile away in one direction
+                return (dx === 32 && dy === 0) || (dx === 0 && dy === 32);
+            });
+
+            // Add unvisited neighbors of same type to queue
+            for (const neighbor of neighbors) {
+                const neighborIndex = this.scene.mapTiles.indexOf(neighbor);
+                if (!visited.has(neighborIndex) && neighbor.texture.key === tileType) {
+                    queue.push(neighbor);
+                }
+            }
+        }
+
+        return cluster;
+    }
+
+    /**
+     * Find the center tile from a list of tiles
+     */
+    findCenterTile(tiles) {
+        if (tiles.length === 0) return null;
+
+        // Calculate average position
+        const avgX = tiles.reduce((sum, t) => sum + t.x, 0) / tiles.length;
+        const avgY = tiles.reduce((sum, t) => sum + t.y, 0) / tiles.length;
+
+        // Find tile closest to average position
+        return tiles.reduce((closest, tile) => {
+            const distCurrent = Math.sqrt(
+                Math.pow(tile.x - avgX, 2) + Math.pow(tile.y - avgY, 2)
+            );
+            const distClosest = Math.sqrt(
+                Math.pow(closest.x - avgX, 2) + Math.pow(closest.y - avgY, 2)
+            );
+            return distCurrent < distClosest ? tile : closest;
+        });
+    }
+
+    /**
+     * Apply solar upgrade in spiral pattern from center
+     */
+    applyUpgradeInSpiral(tiles, centerTile) {
+        if (!tiles || tiles.length === 0) return;
+
+        // Sort tiles by distance from center (spiral outward)
+        const spiralOrder = [...tiles].sort((a, b) => {
+            const distA = Math.sqrt(
+                Math.pow(a.x - centerTile.x, 2) + Math.pow(a.y - centerTile.y, 2)
+            );
+            const distB = Math.sqrt(
+                Math.pow(b.x - centerTile.x, 2) + Math.pow(b.y - centerTile.y, 2)
+            );
+            return distA - distB;
+        });
+
+        // Apply upgrades in spiral order with delay
+        const delayPerTile = 15; // milliseconds between each upgrade
+        let upgradeCount = 0;
+
+        spiralOrder.forEach((tile, orderIndex) => {
+            setTimeout(() => {
+                const currentType = tile.texture.key;
+                const solarType = `${currentType}_solar`;
+
+                // Double-check solar variant exists
+                if (this.scene.textures.exists(solarType)) {
+                    console.log(`🔧 Before upgrade: ${currentType}, After: ${solarType}`);
+
+                    // Update texture
+                    tile.setTexture(solarType, 0);
+                    console.log(`🖼️ Texture set to: ${tile.texture.key}`);
+
+                    // Update mapArray
+                    const tileIndex = this.scene.mapTiles.indexOf(tile);
+                    if (tileIndex !== -1) {
+                        this.scene.mapArray[tileIndex] = solarType;
+                        console.log(`📝 mapArray[${tileIndex}] updated to: ${solarType}`);
+                    }
+
+                    // Clear any tint
+                    if (typeof tile.clearTint === 'function') {
+                        tile.clearTint();
+                    }
+
+                    // Play animation if exists
+                    if (this.scene.anims.exists(solarType)) {
+                        tile.play({ key: solarType, randomFrame: true });
+                        console.log(`🎬 Playing animation: ${solarType}`);
+                    } else {
+                        tile.anims.stop();
+                        console.log(`⏸️ No animation for: ${solarType}, stopping animations`);
+                    }
+
+                    // Update tile changes for saving
+                    if (tile.id !== undefined) {
+                        const changeIndex = this.scene.tileChanges.findIndex(t => t.id === tile.id);
+                        if (changeIndex !== -1) {
+                            this.scene.tileChanges[changeIndex].newTileType = solarType;
+                        } else {
+                            this.scene.tileChanges.push({ id: tile.id, newTileType: solarType });
+                        }
+                    }
+
+                    upgradeCount++;
+                    console.log(`☀️ Upgraded ${currentType} -> ${solarType} (${upgradeCount}/${spiralOrder.length})`);
+                }
+
+                // On last tile, update simulation and save state
+                if (orderIndex === spiralOrder.length - 1) {
+                    console.log(`✅ Bulk upgrade complete! ${upgradeCount} tiles upgraded to solar`);
+
+                    // Update city simulation
+                    if (this.scene.citySim) {
+                        this.scene.citySim.immediateUpdate();
+                    }
+
+                    // Save state for undo/redo
+                    if (!this.scene.isLoadingMap) {
+                        this.scene.saveState();
+                    }
+                }
+            }, orderIndex * delayPerTile);
+        });
     }
 
     /**
