@@ -555,6 +555,9 @@ export class TileInteractionManager {
         }
 
         // Single-tile placement - set texture on sprite array
+        console.log(`🎨 Setting texture to: "${this.scene.gameState.newTile}" (frame: ${this.scene.gameState.frameNumber})`);
+        console.log(`🎨 Texture exists in scene?: ${this.scene.textures.exists(this.scene.gameState.newTile)}`);
+
         if (this.tileArray[0] && typeof this.tileArray[0].setTexture === 'function') {
             this.tileArray[0].setTexture(this.scene.gameState.newTile, this.scene.gameState.frameNumber);
             // Clear the green tint from hover validation

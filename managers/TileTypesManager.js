@@ -306,7 +306,7 @@ export default class TileTypesManager {
                 this.scene.gameState.trees = true;
                 this.scene.gameState.smallTile = true;
                 this.scene.gameState.placeTile = true;
-                this.scene.gameState.newTile = 'tree_anim';
+                this.scene.gameState.newTile = 'tree_b';
 
                 // Let the TileInteractionManager handle the actual placement
                 // by triggering its pointerdown handler
