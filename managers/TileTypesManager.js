@@ -94,22 +94,29 @@ export default class TileTypesManager {
     setupTileInteraction(tile, index) {
         if (!tile) return;
 
+        console.log(`🎯 TileTypesManager: Setting up listeners for tile ${index} (${tile.texture.key})`);
+
         // Tiles are already interactive from GameScene setup
         // We just add our category-based hover handlers
 
         // Add base hover handler (runs before other handlers)
         tile.on('pointerover', (pointer) => {
+            console.log(`🔵 TileTypesManager: pointerover fired for tile ${index}`);
             this.handleBaseTileHover(tile, index, pointer);
         });
 
         tile.on('pointerout', (pointer) => {
+            console.log(`🔴 TileTypesManager: pointerout fired for tile ${index}`);
             this.handleBaseTileOut(tile, index, pointer);
         });
 
         // Add default click handler for greenery tiles
         tile.on('pointerdown', (pointer) => {
+            console.log(`⚫ TileTypesManager: pointerdown fired for tile ${index}`);
             this.handleBaseTileClick(tile, index, pointer);
         });
+
+        console.log(`✅ TileTypesManager: Listeners registered for tile ${index}`);
     }
 
     /**
@@ -118,8 +125,13 @@ export default class TileTypesManager {
      * Tints all connected tiles of the same category (flood-fill) with SPIRAL ANIMATION
      */
     handleBaseTileHover(tile, index, pointer) {
+        console.log(`🌟 TileTypesManager.handleBaseTileHover called for tile ${index}`);
+
         // Only apply base tinting if no active tool/mode is selected
-        if (this.shouldApplyBaseTint()) {
+        const shouldApply = this.shouldApplyBaseTint();
+        console.log(`🔍 shouldApplyBaseTint returned: ${shouldApply}`);
+
+        if (shouldApply) {
             // Skip if already animating to prevent performance issues
             if (this.isAnimating) {
                 return;
@@ -291,6 +303,13 @@ export default class TileTypesManager {
     handleBaseTileClick(tile, index, pointer) {
         // Only auto-place if no active tool/mode is selected
         if (this.shouldApplyBaseTint()) {
+
+            // NEW: If A key is held, don't auto-place - let TileInteractionManager handle cluster upgrade
+            if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld) {
+                console.log(`🔑 A key held - skipping auto-placement, TileInteractionManager will handle cluster upgrade`);
+                return;
+            }
+
             // Check if this tile is part of the currently tinted cluster
             const isTinted = this.tintedCluster && this.tintedCluster.includes(tile);
 
@@ -351,6 +370,8 @@ export default class TileTypesManager {
                              gameState.trees ||
                              gameState.mediumTile ||
                              gameState.largeTile;
+
+        console.log(`📊 TileTypesManager.shouldApplyBaseTint: hasActiveMode=${hasActiveMode}, destroy=${gameState.destroy}, wind=${gameState.wind}, solar=${gameState.solar}, trees=${gameState.trees}`);
 
         return !hasActiveMode;
     }

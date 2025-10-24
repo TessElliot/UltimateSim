@@ -77,35 +77,49 @@ export class TileInteractionManager {
                              this.scene.gameState.mediumTile ||
                              this.scene.gameState.largeTile;
 
-        console.log(`🔍 Hover - hasActiveTool: ${hasActiveTool}, solar: ${this.scene.gameState.solar}, upgrade: ${this.scene.gameState.upgrade}, tile: ${tile.texture.key}`);
-
         // Only show placement feedback if a tool is active
-        if (!hasActiveTool) {
-            console.log(`❌ No active tool - returning`);
-            return; // Let base category tinting handle this
+        if (hasActiveTool) {
+            const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(useType);
+
+            // === A KEY HELD = CLUSTER PREVIEW MODE ===
+            if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld) {
+
+                // A + Solar (upgrade mode)
+                if (this.scene.gameState.upgrade === 'solar') {
+                    if (category === 'greenery') {
+                        // A + Solar over greenery → preview greenery cluster → powerplant
+                        console.log(`✅ A + Solar over greenery - showing greenery cluster preview`);
+                        this.showGreeneryClusterPreview(tile, 'power:plant (solar)');
+                        return;
+                    } else {
+                        // A + Solar over residential → preview residential cluster → _solar
+                        console.log(`✅ A + Solar over residential - showing cluster preview`);
+                        this.showClusterPreview(tile);
+                        return;
+                    }
+                }
+
+                // A + Greenery/Trees
+                if (this.scene.gameState.trees) {
+                    if (category === 'greenery') {
+                        // A + Trees over greenery → preview greenery cluster → wood
+                        console.log(`✅ A + Trees over greenery - showing greenery cluster preview for wood`);
+                        this.showGreeneryClusterPreview(tile, 'wood');
+                        return;
+                    }
+                }
+            }
+
+            // === NO A KEY = SINGLE TILE HOVER FEEDBACK ===
+
+            // Single tile only - set tileArray to [hoveredTile]
+            this.tileArray = [tile];
+            this.mapTexArray = [tile.texture.key];
+
+            // Validate and show green/red tint
+            this.validateAndShowPlacementFeedback(tile0);
         }
-
-        // Check if 'A' key is held and we're in upgrade mode - show cluster preview
-        if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld && this.scene.gameState.upgrade) {
-            console.log(`✅ A + Solar hover - showing cluster preview`);
-            this.showClusterPreview(tile);
-            return;
-        }
-
-        console.log(`📍 Proceeding to validation for ${tile.texture.key}`);
-
-        // Calculate affected tiles based on tile size
-        const tilePosArray = this.calculateAffectedTilePositions(pX, pY);
-
-        // Get tiles and textures at those positions
-        const affectedTiles = this.getAffectedTiles(tilePosArray);
-        this.tileArray = affectedTiles.tiles;
-        this.mapTexArray = affectedTiles.textures;
-
-        console.log(`🎯 tileArray length: ${this.tileArray.length}, mapTexArray: ${this.mapTexArray}`);
-
-        // Validate placement and show tint feedback
-        this.validateAndShowPlacementFeedback(tile0);
+        // If no tool active, do nothing - let TileTypesManager handle base tinting
     }
 
     /**
@@ -143,18 +157,47 @@ export class TileInteractionManager {
         }
 
         // Handle different placement modes
-        // Check if 'A' is held + upgrade mode = cluster upgrade
+        // Check if 'A' is held + upgrade/trees mode = cluster upgrade
         if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld && this.scene.gameState.upgrade) {
-            console.log(`🔑 A + Click: Cluster upgrade mode`);
-            newTileType = this.upgradeCluster(tile, this.scene.gameState.upgrade);
-        } else if (this.scene.gameState.upgrade) {
-            console.log(`⬆️ Upgrade mode: ${this.scene.gameState.upgrade}`);
-            newTileType = this.upgradeTile(tile, tile0, this.scene.gameState.upgrade);
+            const landUse = this.scene.mapArray[tile0];
+            const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
 
-            // If upgrade failed but we have newTile (hybrid mode), try standard placement
-            if (newTileType === null && this.scene.gameState.newTile) {
-                console.log(`ℹ️ Upgrade failed, falling back to placement of ${this.scene.gameState.newTile}`);
-                newTileType = this.placeTile(tile, tile0, tileaArray);
+            if (category === 'greenery' && this.scene.gameState.upgrade === 'solar') {
+                // A + Solar over greenery → upgrade cluster to powerplant
+                console.log(`🔑 A + Solar over greenery: Upgrading cluster to powerplant`);
+                newTileType = this.upgradeGreeneryClusterToTile(tile, 'power:plant (solar)');
+            } else {
+                // A + Solar/other over residential → standard cluster upgrade
+                console.log(`🔑 A + Click: Cluster upgrade mode`);
+                newTileType = this.upgradeCluster(tile, this.scene.gameState.upgrade);
+            }
+        } else if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld && this.scene.gameState.trees) {
+            const landUse = this.scene.mapArray[tile0];
+            const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
+
+            if (category === 'greenery') {
+                // A + Trees over greenery → upgrade cluster to wood
+                console.log(`🔑 A + Trees over greenery: Upgrading cluster to wood`);
+                newTileType = this.upgradeGreeneryClusterToTile(tile, 'wood');
+            }
+        } else if (this.scene.gameState.upgrade) {
+            const landUse = this.scene.mapArray[tile0];
+            const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
+
+            if (category === 'greenery' && this.scene.gameState.upgrade === 'solar') {
+                // Solar over greenery (no A) → place single powerplant
+                console.log(`☀️ Solar over greenery: Placing single powerplant`);
+                newTileType = this.placeTile(tile, tile0, [tile]);
+            } else {
+                // Upgrade residential tile
+                console.log(`⬆️ Upgrade mode: ${this.scene.gameState.upgrade}`);
+                newTileType = this.upgradeTile(tile, tile0, this.scene.gameState.upgrade);
+
+                // If upgrade failed but we have newTile (hybrid mode), try standard placement
+                if (newTileType === null && this.scene.gameState.newTile) {
+                    console.log(`ℹ️ Upgrade failed, falling back to placement of ${this.scene.gameState.newTile}`);
+                    newTileType = this.placeTile(tile, tile0, [tile]);
+                }
             }
         } else if (this.scene.gameState.road) {
             console.log('🛣️ Road mode');
@@ -420,36 +463,28 @@ export class TileInteractionManager {
      */
     canPlaceTile(tile0) {
         const currentTexture = this.mapTexArray[0];
-
-        // UPGRADE MODE - check if tile can be upgraded (doesn't require greenery!)
-        if (this.scene.gameState.upgrade) {
-            // Check if upgrade exists for this tile
-            const currentTileType = currentTexture;
-            const upgradedTileType = `${currentTileType}_${this.scene.gameState.upgrade}`;
-            const upgradeExists = this.scene.textures.exists(upgradedTileType);
-
-            // If upgrade exists, show green (can upgrade)
-            if (upgradeExists) return true;
-
-            // If upgrade doesn't exist but we have newTile (hybrid mode), check placement rules below
-            if (!this.scene.gameState.newTile) {
-                // Pure upgrade mode with no newTile - can't place anything
-                return false;
-            }
-            // Otherwise fall through to standard placement validation for newTile
-        }
-
-        // HARD RULE: Check if tile is in greenery category (for ALL build modes except destroy/upgrade)
         const landUse = this.scene.mapArray[tile0];
         const isGreenery = this.scene.tileTypesManager &&
                           this.scene.tileTypesManager.getTileCategory(landUse) === 'greenery';
 
-        // Destroy mode - can destroy anything except ground
-        if (this.scene.gameState.destroyBool) {
+        // Destroy mode - check FIRST (doesn't require greenery)
+        if (this.scene.gameState.destroy) {
             return currentTexture !== "ground";
         }
 
-        // For ALL building tools: must be on greenery
+        // UPGRADE MODE
+        if (this.scene.gameState.upgrade) {
+            // Greenery + solar = place powerplant (ignore currentTexture_solar check)
+            if (isGreenery && this.scene.gameState.upgrade === 'solar') {
+                return this.scene.gameState.newTile !== null;
+            }
+
+            // Non-greenery (residential) = check if currentTexture_solar exists
+            const upgradedTileType = `${currentTexture}_${this.scene.gameState.upgrade}`;
+            return this.scene.textures.exists(upgradedTileType);
+        }
+
+        // For ALL other building tools: must be on greenery category
         if (!isGreenery) {
             return false;
         }
@@ -834,6 +869,34 @@ export class TileInteractionManager {
     }
 
     /**
+     * Upgrade an entire greenery cluster to a specific tile type in spiral pattern
+     * Used for: A + Solar → powerplant, A + Trees → wood
+     */
+    upgradeGreeneryClusterToTile(clickedTile, targetTileType) {
+        console.log(`🌀 Upgrading greenery cluster to: ${targetTileType}`);
+
+        // Check if target texture exists
+        if (!this.scene.textures.exists(targetTileType)) {
+            console.warn(`❌ Target texture not found: ${targetTileType}`);
+            return null;
+        }
+
+        // Find all connected greenery tiles (category-based, not texture-based)
+        const cluster = this.findConnectedTilesOfCategory(clickedTile, 'greenery');
+
+        console.log(`✨ Found greenery cluster of ${cluster.length} tiles`);
+
+        // Find center of cluster for spiral animation
+        const centerTile = this.findClusterCenter(cluster);
+
+        // Apply upgrade in spiral pattern (pass null for upgradeType, use targetTileType directly)
+        this.applyClusterUpgradeInSpiral(cluster, centerTile, null, targetTileType);
+
+        // Return null because we're handling multiple tiles asynchronously
+        return null;
+    }
+
+    /**
      * Find all tiles connected to the start tile with the same type
      */
     findConnectedTilesOfSameType(startTile, tileType) {
@@ -863,6 +926,52 @@ export class TileInteractionManager {
                 const neighborIndex = this.scene.mapTiles.indexOf(neighbor);
                 if (!visited.has(neighborIndex) && neighbor.texture.key === tileType) {
                     queue.push(neighbor);
+                }
+            }
+        }
+
+        return cluster;
+    }
+
+    /**
+     * Find all tiles connected to the start tile with the same CATEGORY
+     * Used for greenery cluster operations (finds grass+park+forest together)
+     */
+    findConnectedTilesOfCategory(startTile, category) {
+        const visited = new Set();
+        const cluster = [];
+        const queue = [startTile];
+
+        while (queue.length > 0) {
+            const currentTile = queue.shift();
+            const currentIndex = this.scene.mapTiles.indexOf(currentTile);
+
+            if (currentIndex === -1 || visited.has(currentIndex)) {
+                continue;
+            }
+
+            visited.add(currentIndex);
+
+            // Check if this tile belongs to the target category
+            const landUse = this.scene.mapArray[currentIndex];
+            const tileCategory = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
+
+            if (tileCategory === category) {
+                cluster.push(currentTile);
+
+                // Find adjacent tiles (4-directional)
+                const neighbors = this.scene.mapTiles.filter(tile => {
+                    const dx = Math.abs(tile.x - currentTile.x);
+                    const dy = Math.abs(tile.y - currentTile.y);
+                    return (dx === 32 && dy === 0) || (dx === 0 && dy === 32);
+                });
+
+                // Add unvisited neighbors to queue
+                for (const neighbor of neighbors) {
+                    const neighborIndex = this.scene.mapTiles.indexOf(neighbor);
+                    if (!visited.has(neighborIndex)) {
+                        queue.push(neighbor);
+                    }
                 }
             }
         }
@@ -970,6 +1079,77 @@ export class TileInteractionManager {
     }
 
     /**
+     * Show greenery cluster preview with green tint in spiral pattern
+     * Used for: A + Solar over greenery, A + Trees over greenery
+     */
+    showGreeneryClusterPreview(tile, targetTileType) {
+        const tile0 = this.scene.mapTiles.indexOf(tile);
+        const landUse = this.scene.mapArray[tile0];
+        const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
+
+        console.log(`👁️ showGreeneryClusterPreview called - category: ${category}, target: ${targetTileType}`);
+
+        // Must be greenery category
+        if (category !== 'greenery') {
+            console.log(`❌ Not greenery - showing red tint`);
+            tile.setTint(0xff0000);
+            this.tileArray = [tile];
+            return;
+        }
+
+        // Cancel any existing preview animation
+        this.clearClusterPreviewTimeouts();
+
+        // Clear tints from previous cluster
+        if (this.tileArray && this.tileArray.length > 0) {
+            this.tileArray.forEach(t => {
+                if (t && typeof t.clearTint === 'function') {
+                    t.clearTint();
+                }
+            });
+        }
+
+        // Find cluster of connected greenery tiles (category-based, not texture-based)
+        const cluster = this.findConnectedTilesOfCategory(tile, 'greenery');
+
+        console.log(`✨ Found greenery cluster of ${cluster.length} tiles for preview`);
+
+        // Set animation lock
+        this.isPreviewAnimating = true;
+
+        // Sort tiles in spiral order from hovered tile
+        const spiralOrder = [...cluster].sort((a, b) => {
+            const distA = Math.sqrt(Math.pow(a.x - tile.x, 2) + Math.pow(a.y - tile.y, 2));
+            const distB = Math.sqrt(Math.pow(b.x - tile.x, 2) + Math.pow(b.y - tile.y, 2));
+            return distA - distB;
+        });
+
+        console.log(`🌀 Starting spiral tint animation for ${spiralOrder.length} greenery tiles`);
+
+        // Show green tint on all tiles in cluster in spiral pattern
+        const delayPerTile = 10;
+        spiralOrder.forEach((clusterTile, orderIndex) => {
+            const timeoutId = setTimeout(() => {
+                if (clusterTile && typeof clusterTile.setTint === 'function') {
+                    clusterTile.setTint(0x00ff00);
+                    console.log(`🟢 [${orderIndex + 1}/${spiralOrder.length}] Applied GREEN tint to ${clusterTile.texture.key}`);
+                }
+
+                // Release lock when last tile is tinted
+                if (orderIndex === spiralOrder.length - 1) {
+                    this.isPreviewAnimating = false;
+                    console.log(`✅ Greenery spiral animation complete`);
+                }
+            }, orderIndex * delayPerTile);
+
+            this.clusterPreviewTimeouts.push(timeoutId);
+        });
+
+        // Store in tileArray for cleanup
+        this.tileArray = spiralOrder;
+    }
+
+    /**
      * Clear all cluster preview animation timeouts
      */
     clearClusterPreviewTimeouts() {
@@ -981,7 +1161,7 @@ export class TileInteractionManager {
     /**
      * Apply upgrade to cluster in spiral pattern from center
      */
-    applyClusterUpgradeInSpiral(tiles, centerTile, upgradeType) {
+    applyClusterUpgradeInSpiral(tiles, centerTile, upgradeType, targetTileType = null) {
         if (!tiles || tiles.length === 0) return;
 
         // Sort tiles by distance from center (spiral outward)
@@ -1002,21 +1182,30 @@ export class TileInteractionManager {
         spiralOrder.forEach((tile, orderIndex) => {
             setTimeout(() => {
                 const currentType = tile.texture.key;
-                const solarType = `${currentType}_${upgradeType}`;
 
-                if (this.scene.textures.exists(solarType)) {
+                // Determine new tile type
+                let newTileType;
+                if (targetTileType) {
+                    // Direct tile type (for greenery clusters → powerplant/wood)
+                    newTileType = targetTileType;
+                } else {
+                    // Suffix upgrade (for residential clusters → tileName_solar)
+                    newTileType = `${currentType}_${upgradeType}`;
+                }
+
+                if (this.scene.textures.exists(newTileType)) {
                     console.log(`🔧 BEFORE: tile.texture.key = "${tile.texture.key}"`);
 
                     // Update texture
-                    tile.setTexture(solarType, 0);
+                    tile.setTexture(newTileType, 0);
 
                     console.log(`🔧 AFTER setTexture: tile.texture.key = "${tile.texture.key}"`);
 
                     // Update mapArray
                     const tileIndex = this.scene.mapTiles.indexOf(tile);
                     if (tileIndex !== -1) {
-                        console.log(`🔧 Updating mapArray[${tileIndex}] from "${this.scene.mapArray[tileIndex]}" to "${solarType}"`);
-                        this.scene.mapArray[tileIndex] = solarType;
+                        console.log(`🔧 Updating mapArray[${tileIndex}] from "${this.scene.mapArray[tileIndex]}" to "${newTileType}"`);
+                        this.scene.mapArray[tileIndex] = newTileType;
                         console.log(`🔧 Confirmed: mapArray[${tileIndex}] = "${this.scene.mapArray[tileIndex]}"`);
                     }
 
@@ -1026,12 +1215,12 @@ export class TileInteractionManager {
                     }
 
                     // Play animation if exists
-                    if (this.scene.anims.exists(solarType)) {
-                        console.log(`🎬 Playing animation: "${solarType}"`);
-                        tile.play({ key: solarType, randomFrame: true });
+                    if (this.scene.anims.exists(newTileType)) {
+                        console.log(`🎬 Playing animation: "${newTileType}"`);
+                        tile.play({ key: newTileType, randomFrame: true });
                         console.log(`🎬 Animation status: ${tile.anims.isPlaying ? 'PLAYING' : 'NOT PLAYING'}, current anim: "${tile.anims.currentAnim ? tile.anims.currentAnim.key : 'none'}"`);
                     } else {
-                        console.log(`⚠️ No animation found for "${solarType}"`);
+                        console.log(`⚠️ No animation found for "${newTileType}"`);
                         tile.anims.stop();
                     }
 
@@ -1039,9 +1228,9 @@ export class TileInteractionManager {
                     if (tile.id !== undefined) {
                         const changeIndex = this.scene.tileChanges.findIndex(t => t.id === tile.id);
                         if (changeIndex !== -1) {
-                            this.scene.tileChanges[changeIndex].newTileType = solarType;
+                            this.scene.tileChanges[changeIndex].newTileType = newTileType;
                         } else {
-                            this.scene.tileChanges.push({ id: tile.id, newTileType: solarType });
+                            this.scene.tileChanges.push({ id: tile.id, newTileType: newTileType });
                         }
                     }
 
