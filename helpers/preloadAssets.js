@@ -271,7 +271,15 @@
     frameWidth: 32,
     frameHeight: 64,
   });
+  scene.load.spritesheet("house_solar", "assets/landuse/house_solar.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
   scene.load.spritesheet("detached", "assets/landuse/detached.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("detached_solar", "assets/landuse/detached_solar.png", {
     frameWidth: 32,
     frameHeight: 64,
   });
@@ -279,11 +287,23 @@
     frameWidth: 32,
     frameHeight: 64,
   });
+  scene.load.spritesheet("neighbourhood_solar", "assets/landuse/neighbourhood_solar.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
   scene.load.spritesheet("neighborhood", "assets/landuse/neighborhood.png", {
     frameWidth: 32,
     frameHeight: 64,
   });
+  scene.load.spritesheet("neighborhood_solar", "assets/landuse/neighborhood_solar.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
   scene.load.spritesheet("residential", "assets/landuse/residential.png", {
+    frameWidth: 32,
+    frameHeight: 64,
+  });
+  scene.load.spritesheet("residential_solar", "assets/landuse/residential_solar.png", {
     frameWidth: 32,
     frameHeight: 64,
   });
