@@ -327,7 +327,7 @@
     frameWidth: 32,
     frameHeight: 64,
   });
-  scene.load.spritesheet("tree_b", "assets/effects/tree_anim.png", {
+  scene.load.spritesheet("trees", "assets/effects/tree_anim.png", {
     frameWidth: 32,
     frameHeight: 64,
   });
