@@ -79,7 +79,7 @@ export class TileInteractionManager {
             const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(useType);
 
             // === A KEY HELD = CLUSTER PREVIEW MODE ===
-            if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld) {
+            if (this.scene.inputManager && this.scene.inputManager.spiralMode) {
 
                 // A + Solar (upgrade mode)
                 if (this.scene.gameState.upgrade === 'solar') {
@@ -155,7 +155,7 @@ export class TileInteractionManager {
 
         // Handle different placement modes
         // Check if 'A' is held + upgrade/trees mode = cluster upgrade
-        if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld && this.scene.gameState.upgrade) {
+        if (this.scene.inputManager && this.scene.inputManager.spiralMode && this.scene.gameState.upgrade) {
             const landUse = this.scene.mapArray[tile0];
             const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
 
@@ -168,7 +168,7 @@ export class TileInteractionManager {
                 console.log(`🔑 A + Click: Cluster upgrade mode`);
                 newTileType = this.upgradeCluster(tile, this.scene.gameState.upgrade);
             }
-        } else if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld && this.scene.gameState.trees) {
+        } else if (this.scene.inputManager && this.scene.inputManager.spiralMode && this.scene.gameState.trees) {
             const landUse = this.scene.mapArray[tile0];
             const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
 
@@ -1192,6 +1192,12 @@ export class TileInteractionManager {
                         this.scene.tileTypesManager.registerTile(tile, tileIndex);
                     }
 
+                    // Emit climate event for EACH tile upgrade
+                    this.scene.emitter.emit('TILE_PLACED', {
+                        oldTileType: currentType,
+                        newTileType: newTileType
+                    });
+
                     upgradeCount++;
                     console.log(`☀️ Upgraded ${currentType} -> ${newTileType} (${upgradeCount}/${spiralOrder.length})`);
                 }
@@ -1209,12 +1215,6 @@ export class TileInteractionManager {
                     if (!this.scene.isLoadingMap) {
                         this.scene.saveState();
                     }
-
-                    // Emit event for cluster upgrade completion
-                    this.scene.emitter.emit('TILE_PLACED', {
-                        oldTileType: currentType,
-                        newTileType: newTileType
-                    });
                 }
             }, orderIndex * delayPerTile);
         });
