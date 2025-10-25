@@ -2059,44 +2059,47 @@ export class GameScene extends Phaser.Scene {
                         oldTileType: this.texture.key,
                         newTileType: scene.gameState.newTile
                     });
-                } else if (scene.gameState.destroy) {
-                    if (tileArray.length === 0) {
-                        tileArray.push(this);
-                    }
+                // OLD LEGACY ARCHITECTURE - COMMENTED OUT
+                // Destroy/bulldoze is now handled by TileManager.handleDestroyClick()
+                // } else if (scene.gameState.destroy) {
+                //     if (tileArray.length === 0) {
+                //         tileArray.push(this);
+                //     }
 
-                    let currentSpriteWidth = tileArray[0].width;
-                    const oldTileType = this.texture.key;
+                //     let currentSpriteWidth = tileArray[0].width;
+                //     const oldTileType = this.texture.key;
 
-                    tileArray[0].play("bulldozing");
-                    tileArray[0].setTexture("ground");
-                    scene.mapTiles[tile0].setTexture("ground");
-                    scene.mapTiles[tile0].setOrigin(0.5, 0.5);
-                    scene.mapArray[tile0] = "ground";
-                    newTileType = "ground";
+                //     tileArray[0].play("bulldozing");
+                //     tileArray[0].setTexture("ground");
+                //     scene.mapTiles[tile0].setTexture("ground");
+                //     scene.mapTiles[tile0].setOrigin(0.5, 0.5);
+                //     scene.mapArray[tile0] = "ground";
+                //     newTileType = "ground";
 
-                    // Emit tile removed event for bulldoze
-                    scene.emitter.emit('TILE_REMOVED', {
-                        tileType: oldTileType
-                    });
+                //     // Emit tile removed event for bulldoze
+                //     scene.emitter.emit('TILE_REMOVED', {
+                //         tileType: oldTileType
+                //     });
 
-                    if (currentSpriteWidth == 96) {
-                        for (let i = 0; i < tilePosArray.length; i++) {
-                            let checkForNull = scene.mapTilesPos.indexOf(tilePosArray[i]);
+                //     if (currentSpriteWidth == 96) {
+                //         for (let i = 0; i < tilePosArray.length; i++) {
+                //             let checkForNull = scene.mapTilesPos.indexOf(tilePosArray[i]);
 
-                            scene.mapTiles[checkForNull].play("bulldozing");
-                            scene.mapTiles[checkForNull].setTexture("ground");
-                            scene.mapTiles[checkForNull].setOrigin(0.5, 0.5);
-                        }
-                    } else if (currentSpriteWidth == 64) {
-                        for (let i = 0; i < 4; i++) {
-                            let checkForNull = scene.mapTilesPos.indexOf(tilePosArray[i]);
+                //             scene.mapTiles[checkForNull].play("bulldozing");
+                //             scene.mapTiles[checkForNull].setTexture("ground");
+                //             scene.mapTiles[checkForNull].setOrigin(0.5, 0.5);
+                //         }
+                //     } else if (currentSpriteWidth == 64) {
+                //         for (let i = 0; i < 4; i++) {
+                //             let checkForNull = scene.mapTilesPos.indexOf(tilePosArray[i]);
 
-                            scene.mapTiles[checkForNull].play("bulldozing");
-                            scene.mapTiles[checkForNull].setTexture("ground");
-                            scene.mapTiles[checkForNull].setOrigin(0.5, 0.5);
-                        }
-                    } else {
-                    }
+                //             scene.mapTiles[checkForNull].play("bulldozing");
+                //             scene.mapTiles[checkForNull].setTexture("ground");
+                //             scene.mapTiles[checkForNull].setOrigin(0.5, 0.5);
+                //         }
+                //     } else {
+                //     }
+                // }
                 } else if (scene.gameState.bike && tileArray[0] && tileArray[0].texture && tileArray[0].texture.key === "road") {
                     tileArray[0].setTexture("bike", tileArray[0].frame.name);
                     newTileType = "bike";
