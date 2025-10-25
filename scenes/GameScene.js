@@ -4,6 +4,7 @@ import { SaveLoadManager } from "../managers/SaveLoadManager.js";
 import { RotationHelper } from "../helpers/RotationHelper.js";
 import { ClimateManager } from "../managers/ClimateManager.js";
 import TileManager from "../managers/TileManager.js";
+import { RumbleSprite } from "../utils/RumbleSprite.js";
 import { MapDataService } from "../services/MapDataService.js";
 import { processBoundingBoxes } from "../services/os.js";
 import { fetchLocation, fetchLatLon } from "../services/os.js";
@@ -63,6 +64,7 @@ export class GameScene extends Phaser.Scene {
         this.mapDataService = new MapDataService();
         this.climateManager = new ClimateManager(this);
         this.tileManager = new TileManager(this);
+        this.rumbleSprite = new RumbleSprite(this);
         this.getInfo = null;
         this.tileChanges = []; // To store tile modifications
         this.startX = 0;
