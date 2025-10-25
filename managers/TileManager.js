@@ -609,6 +609,10 @@ export default class TileManager {
                 this.handleWindClick(tile, index);
                 break;
 
+            case 'destroy':
+                this.handleDestroyClick(tile, index);
+                break;
+
             default:
                 console.log(`⚠️ No click handler for mode: ${mode}`);
                 break;
@@ -747,6 +751,50 @@ export default class TileManager {
 
         // Apply upgrades in spiral pattern
         this.applyUpgradeInSpiral(tilesToUpgrade, tile, upgradeType, 'ground');
+    }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Handle destroy/bulldoze click - convert tile to ground
+     */
+    handleDestroyClick(tile, index) {
+        console.log(`🔨 handleDestroyClick - tile ${index}`);
+
+        const oldTileType = tile.texture.key;
+
+        // Play bulldozing animation
+        if (this.scene.anims.exists('bulldozing')) {
+            tile.play('bulldozing');
+        }
+
+        // Convert to ground
+        tile.setTexture('ground');
+        tile.setOrigin(0.5, 0.5);
+
+        // Update mapArray
+        this.scene.mapArray[index] = 'ground';
+
+        // Update tileChanges for saving
+        if (tile.id !== undefined) {
+            const changeIndex = this.scene.tileChanges.findIndex(t => t.id === tile.id);
+            if (changeIndex !== -1) {
+                this.scene.tileChanges[changeIndex].newTileType = 'ground';
+            } else {
+                this.scene.tileChanges.push({ id: tile.id, newTileType: 'ground' });
+            }
+        }
+
+        // Emit tile removed event for climate tracking
+        this.scene.emitter.emit('TILE_REMOVED', {
+            tileType: oldTileType
+        });
+
+        // Save state
+        if (!this.scene.isLoadingMap) {
+            this.scene.saveState();
+        }
+
+        console.log(`✅ Bulldozed ${oldTileType} → ground`);
     }
 
     /**
