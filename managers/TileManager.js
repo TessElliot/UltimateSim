@@ -291,7 +291,7 @@ export default class TileManager {
 
     /**
      * NEW UNIFIED ARCHITECTURE:
-     * Apply destroy/bulldoze tinting - full white overlay with rumble effect
+     * Apply destroy/bulldoze tinting - white overlay with shader distortion effect
      */
     applyDestroyTint(tile, index) {
         console.log(`🔨 applyDestroyTint - tile ${index}`);
@@ -302,16 +302,18 @@ export default class TileManager {
         this.tintedCluster = [tile];
         this.savedClusterForUpgrade = [];
 
-        // Start rumble effect for destroy mode
-        if (this.scene.rumbleSprite) {
-            this.scene.rumbleSprite.startAmbientRumble(tile, {
-                intensity: 2,      // 2px shake - noticeable but not excessive
-                frequency: 40,     // 40ms updates - rapid for urgency
-                speed: 4,          // 4 Hz oscillation - fast/aggressive
-                flicker: false     // No alpha flicker - keep it simple
-            });
+        // Apply shader-based rumble distortion effect
+        try {
+            tile.setPipeline('RumbleDistortion');
+            const pipeline = tile.pipeline;
+            if (pipeline) {
+                pipeline.intensity = 0.10;  // Strong pixel distortion for urgency
+                pipeline.frequency = 35;    // Medium wave density for organic feel
+            }
             this.rumbledTiles.push(tile);
-            console.log(`💥 Started rumble effect on tile ${index}`);
+            console.log(`💥 Applied shader distortion to tile ${index}`);
+        } catch (error) {
+            console.error(`⚠️ Failed to apply shader pipeline to tile ${index}:`, error);
         }
     }
 
@@ -587,20 +589,24 @@ export default class TileManager {
     }
 
     /**
-     * Handle base tile out - removes tint from cluster and stops rumble effects
+     * Handle base tile out - removes tint from cluster and stops shader effects
      */
     handleBaseTileOut(tile) {
         if (this.hoveredTile === tile) {
             // Cancel any ongoing animation timeouts
             this.clearAnimationTimeouts();
 
-            // Stop all rumble effects
-            if (this.scene.rumbleSprite && this.rumbledTiles.length > 0) {
+            // Reset shader pipelines for all rumbled tiles
+            if (this.rumbledTiles.length > 0) {
                 this.rumbledTiles.forEach(rumbledTile => {
-                    this.scene.rumbleSprite.stopAmbientRumble(rumbledTile);
+                    try {
+                        rumbledTile.resetPipeline();
+                    } catch (error) {
+                        console.error('⚠️ Failed to reset pipeline:', error);
+                    }
                 });
                 this.rumbledTiles = [];
-                console.log(`🛑 Stopped all rumble effects`);
+                console.log(`🛑 Reset shader pipelines on pointerout`);
             }
 
             // Clear all tints using utility method
@@ -800,11 +806,13 @@ export default class TileManager {
 
         const oldTileType = tile.texture.key;
 
-        // Stop rumble effect before bulldozing
-        if (this.scene.rumbleSprite) {
-            this.scene.rumbleSprite.stopAmbientRumble(tile);
+        // Reset shader pipeline before bulldozing
+        try {
+            tile.resetPipeline();
             this.rumbledTiles = this.rumbledTiles.filter(t => t !== tile);
-            console.log(`🛑 Stopped rumble on tile ${index} before bulldozing`);
+            console.log(`🛑 Reset shader pipeline on tile ${index} before bulldozing`);
+        } catch (error) {
+            console.error(`⚠️ Failed to reset pipeline on tile ${index}:`, error);
         }
 
         // Clear the white tint before animation

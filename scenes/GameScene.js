@@ -5,6 +5,7 @@ import { RotationHelper } from "../helpers/RotationHelper.js";
 import { ClimateManager } from "../managers/ClimateManager.js";
 import TileManager from "../managers/TileManager.js";
 import { RumbleSprite } from "../utils/RumbleSprite.js";
+import RumbleDistortionPipeline from "../effects/RumbleDistortionPipeline.js";
 import { MapDataService } from "../services/MapDataService.js";
 import { processBoundingBoxes } from "../services/os.js";
 import { fetchLocation, fetchLatLon } from "../services/os.js";
@@ -209,6 +210,14 @@ export class GameScene extends Phaser.Scene {
         } catch (error) {
             console.error('⚠️ Error creating animations:', error);
             // Continue anyway - animations are not critical for resume
+        }
+
+        // Register custom WebGL pipelines
+        try {
+            this.renderer.pipelines.add('RumbleDistortion', new RumbleDistortionPipeline(this.game));
+            console.log('✅ RumbleDistortion pipeline registered');
+        } catch (error) {
+            console.error('⚠️ Error registering RumbleDistortion pipeline:', error);
         }
 
         // Get reference to DOM element for info text (tool/mode display)
