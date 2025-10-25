@@ -1193,7 +1193,7 @@ export class TileInteractionManager {
                     }
 
                     upgradeCount++;
-                    console.log(`☀️ Upgraded ${currentType} -> ${solarType} (${upgradeCount}/${spiralOrder.length})`);
+                    console.log(`☀️ Upgraded ${currentType} -> ${newTileType} (${upgradeCount}/${spiralOrder.length})`);
                 }
 
                 // On last tile, update simulation and save state

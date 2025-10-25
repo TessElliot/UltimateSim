@@ -67,7 +67,17 @@ export class ClimateManager {
      */
     handleTilePlaced(data) {
         console.log(`🌍 ClimateManager: Tile placed - ${data.oldTileType} → ${data.newTileType}`);
-        this.recalculateScore();
+
+        // Use delta calculation: subtract old score, add new score
+        const oldScore = findClimateNumber(data.oldTileType);
+        const newScore = findClimateNumber(data.newTileType);
+        const delta = newScore - oldScore;
+
+        console.log(`   📊 Old score: ${oldScore}, New score: ${newScore}, Delta: ${delta}`);
+
+        // Update current score by delta
+        const updatedScore = this.currentScore + delta;
+        this.updateScore(updatedScore);
     }
 
     /**
@@ -76,7 +86,16 @@ export class ClimateManager {
      */
     handleTileRemoved(data) {
         console.log(`🌍 ClimateManager: Tile removed - ${data.tileType}`);
-        this.recalculateScore();
+
+        // Use delta calculation: subtract the removed tile's score
+        const removedScore = findClimateNumber(data.tileType);
+        const delta = -removedScore;
+
+        console.log(`   📊 Removed score: ${removedScore}, Delta: ${delta}`);
+
+        // Update current score by delta
+        const updatedScore = this.currentScore + delta;
+        this.updateScore(updatedScore);
     }
 
     /**
