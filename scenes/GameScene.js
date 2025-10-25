@@ -3,7 +3,6 @@ import { InputManager } from "../managers/InputManager.js";
 import { SaveLoadManager } from "../managers/SaveLoadManager.js";
 import { RotationHelper } from "../helpers/RotationHelper.js";
 import { ClimateManager } from "../managers/ClimateManager.js";
-import { TileInteractionManager } from "../managers/TileInteractionManager.js";
 import TileManager from "../managers/TileManager.js";
 import { MapDataService } from "../services/MapDataService.js";
 import { processBoundingBoxes } from "../services/os.js";
@@ -63,7 +62,6 @@ export class GameScene extends Phaser.Scene {
         this.rotationHelper = new RotationHelper(this, tileWidth, tileHeight);
         this.mapDataService = new MapDataService();
         this.climateManager = new ClimateManager(this);
-        this.tileInteractionManager = new TileInteractionManager(this, gridToTileKey, tileWidth, tileHeight);
         this.tileManager = new TileManager(this);
         this.getInfo = null;
         this.tileChanges = []; // To store tile modifications
@@ -1472,8 +1470,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     addListenerToTile(tile) {
-        // Delegate to TileInteractionManager
-        this.tileInteractionManager.addListenerToTile(tile);
+        // Register tile with TileManager for all interactions
+        const tileIndex = this.mapTiles.indexOf(tile);
+        if (tileIndex !== -1 && this.tileManager) {
+            this.tileManager.registerTile(tile, tileIndex);
+        }
     }
 
     // Legacy method - kept for reference, now handled by TileInteractionManager
