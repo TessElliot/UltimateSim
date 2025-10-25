@@ -669,6 +669,12 @@ export function createAnimations(scene) {
       frameRate: 1,
     },
     {
+      key: "power:plant (solar)",
+      sprite: "power:plant (solar)",
+      frames: [0, 1, 2, 3],
+      frameRate: 1,
+    },
+    {
       key: "schoolyard",
       sprite: "schoolyard",
       frames: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],

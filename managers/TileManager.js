@@ -280,11 +280,51 @@ export default class TileManager {
 
     /**
      * NEW UNIFIED ARCHITECTURE:
-     * Apply wind tinting - to be implemented
+     * Apply wind tinting - for ground tiles only
      */
     applyWindTint(tile, index) {
-        console.log(`💨 applyWindTint - TODO: implement`);
-        // TODO: Similar to solar, but only works on greenery
+        const landUse = this.scene.mapArray[index];
+        const spiralMode = this.scene.inputManager?.spiralMode;
+
+        console.log(`💨 applyWindTint - landUse: ${landUse}, spiral mode: ${spiralMode}`);
+
+        // Wind only works on ground tiles
+        if (landUse !== 'ground' && landUse !== 'null') {
+            console.log(`❌ Wind only works on ground, not "${landUse}" - showing red tint`);
+            tile.setTint(0xff0000); // Red = invalid
+            this.tintedCluster = [tile];
+            this.savedClusterForUpgrade = [];
+            return;
+        }
+
+        // Find connected ground tiles
+        const connectedTiles = this.findConnectedGroundTiles(tile);
+        console.log(`💨 Found ${connectedTiles.length} connected ground tiles`);
+
+        if (connectedTiles.length === 0) {
+            console.log(`⚠️ No connected ground tiles found`);
+            tile.setTint(0xff0000); // Red = invalid
+            this.tintedCluster = [tile];
+            this.savedClusterForUpgrade = [];
+            return;
+        }
+
+        const centerTile = this.findClusterCenter(connectedTiles);
+        const tintColor = 0x00ffff; // Cyan for wind
+
+        if (!spiralMode) {
+            // Single tile mode: tint only the hovered tile
+            tile.setTint(tintColor);
+            this.tintedCluster = [tile];
+            this.savedClusterForUpgrade = [tile];
+            console.log(`💨 Single tile mode - tinted 1 tile`);
+        } else {
+            // Spiral mode: tint entire cluster
+            this.applyTintInSpiral(connectedTiles, centerTile, tintColor);
+            this.tintedCluster = connectedTiles;
+            this.savedClusterForUpgrade = connectedTiles;
+            console.log(`💨 Spiral mode - tinting ${connectedTiles.length} tiles`);
+        }
     }
 
     /**
@@ -468,6 +508,46 @@ export default class TileManager {
     }
 
     /**
+     * Find all tiles connected to start tile that are ground tiles
+     * Used for wind turbine placement
+     */
+    findConnectedGroundTiles(startTile) {
+        const visited = new Set();
+        const connectedTiles = [];
+        const queue = [startTile];
+
+        while (queue.length > 0) {
+            const currentTile = queue.shift();
+            const currentIndex = this.scene.mapTiles.indexOf(currentTile);
+
+            // Skip if already visited or invalid
+            if (currentIndex === -1 || visited.has(currentIndex)) {
+                continue;
+            }
+
+            // Check if this tile is ground or null
+            const currentLandUse = this.scene.mapArray[currentIndex];
+
+            if (currentLandUse === 'ground' || currentLandUse === 'null') {
+                // Mark as visited and add to connected tiles
+                visited.add(currentIndex);
+                connectedTiles.push(currentTile);
+
+                // Get neighbors and add unvisited ones to queue
+                const neighbors = this.scene.getNeighborsForTile(currentTile, this.scene);
+                neighbors.forEach(neighbor => {
+                    const neighborIndex = this.scene.mapTiles.indexOf(neighbor);
+                    if (neighborIndex !== -1 && !visited.has(neighborIndex)) {
+                        queue.push(neighbor);
+                    }
+                });
+            }
+        }
+
+        return connectedTiles;
+    }
+
+    /**
      * Handle base tile out - removes tint from cluster
      */
     handleBaseTileOut(tile) {
@@ -620,11 +700,43 @@ export default class TileManager {
 
     /**
      * NEW UNIFIED ARCHITECTURE:
-     * Handle wind click - to be implemented
+     * Handle wind click - place wind turbines on ground tiles
      */
     handleWindClick(tile, index) {
-        console.log(`💨 handleWindClick - TODO: implement`);
-        // TODO: Similar to solar click, place wind turbines on greenery
+        if (!this.savedClusterForUpgrade || this.savedClusterForUpgrade.length === 0) {
+            console.log(`⚠️ No saved cluster - ignoring click`);
+            return;
+        }
+
+        const landUse = this.scene.mapArray[index];
+        const category = this.getTileCategory(landUse);
+        const spiralMode = this.scene.inputManager?.spiralMode;
+
+        console.log(`💨 handleWindClick - landUse: ${landUse}, category: ${category}, spiral mode: ${spiralMode}, cluster size: ${this.savedClusterForUpgrade.length}`);
+
+        // Wind can only be placed on ground tiles
+        if (landUse !== 'ground' && landUse !== 'null') {
+            console.log(`❌ Wind can only be placed on ground tiles, not "${landUse}"`);
+            return;
+        }
+
+        let tilesToUpgrade;
+
+        if (!spiralMode) {
+            // Spiral mode OFF: Upgrade ONLY index 0
+            tilesToUpgrade = [this.savedClusterForUpgrade[0]];
+            console.log(`🎯 Upgrading index 0 only`);
+        } else {
+            // Spiral mode ON: Upgrade ENTIRE cluster
+            tilesToUpgrade = this.savedClusterForUpgrade;
+            console.log(`🌀 Upgrading entire cluster (${tilesToUpgrade.length} tiles)`);
+        }
+
+        // Wind turbines use the "wind" texture
+        const upgradeType = 'wind';
+
+        // Apply upgrades in spiral pattern
+        this.applyUpgradeInSpiral(tilesToUpgrade, tile, upgradeType, 'ground');
     }
 
     /**
@@ -648,8 +760,8 @@ export default class TileManager {
                 const currentType = tile.texture.key;
                 let newTileType;
 
-                if (category === 'greenery') {
-                    // Greenery → direct tile type (power:plant)
+                if (category === 'greenery' || category === 'ground') {
+                    // Greenery/ground → direct tile type (power:plant solar, wind)
                     newTileType = upgradeType;
                 } else {
                     // Residential → concatenate suffix (house + _solar = house_solar)
@@ -682,7 +794,11 @@ export default class TileManager {
 
                     // Play animation if exists
                     if (this.scene.anims.exists(newTileType)) {
+                        console.log(`🎬 Playing animation for: ${newTileType}`);
                         tile.play({ key: newTileType, randomFrame: true });
+                    } else {
+                        console.log(`⚠️ No animation for: ${newTileType} - stopping animations`);
+                        tile.anims.stop();
                     }
 
                     // Update tile changes for saving
