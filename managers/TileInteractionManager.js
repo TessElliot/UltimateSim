@@ -1,7 +1,6 @@
 // managers/TileInteractionManager.js
 // Manages all tile hover, click, and interaction behaviors
 
-import { findClimateNumber } from '../helpers/tileUtils.js';
 import { updateAllRoadPatterns } from '../helpers/connector.js';
 import { updateAllRailPatterns } from '../helpers/connector_rail.js';
 import { landUseInfo } from '../services/os.js';
@@ -58,11 +57,9 @@ export class TileInteractionManager {
 
         const tile0 = this.scene.mapTiles.indexOf(tile);
         const useType = this.scene.mapArray[tile0];
-        const displayClimateNum = findClimateNumber(tile.texture.key);
 
-        // Handle info mode
+        // Info mode is now handled by TileTypesManager.displayTileInfo()
         if (this.scene.gameState.infoBool) {
-            this.handleInfoMode(tile, tile0, useType, displayClimateNum, pointer);
             return;
         }
 
@@ -301,52 +298,7 @@ export class TileInteractionManager {
     // ========================================================================
     // HELPER METHODS - Info Mode
     // ========================================================================
-
-    handleInfoMode(tile, tile0, useType, displayClimateNum, pointer) {
-        // Dim all tiles
-        this.scene.mapTiles.forEach(mapTex => {
-            if (mapTex) mapTex.alpha = 0.2;
-        });
-
-        // Highlight current tile
-        tile.alpha = 1;
-
-        // Update info text with typewriter effect and mouse position (landuse info only)
-        if (this.scene.infoTextElement) {
-            const text = `Land Use: '${useType}' with Climate Impact of: ${displayClimateNum}`;
-
-            // Position the info box at an equilateral angle from the mouse cursor
-            if (pointer) {
-                const offsetX = 15; // 15px to the right of cursor
-                const offsetY = 15; // 15px below cursor (equilateral angle)
-                this.scene.infoTextElement.style.left = (pointer.x + offsetX) + 'px';
-                this.scene.infoTextElement.style.top = (pointer.y + offsetY) + 'px';
-            }
-
-            // Reset for typewriter effect
-            this.scene.infoTextElement.textContent = '';
-            this.scene.infoTextElement.classList.add('show');
-
-            // Trigger typewriter effect
-            let charIndex = 0;
-            const typeSpeed = 30; // milliseconds per character
-
-            // Clear any existing typewriter interval
-            if (this.scene.landuseTypewriterInterval) {
-                clearInterval(this.scene.landuseTypewriterInterval);
-            }
-
-            this.scene.landuseTypewriterInterval = setInterval(() => {
-                if (charIndex < text.length) {
-                    this.scene.infoTextElement.textContent += text.charAt(charIndex);
-                    charIndex++;
-                } else {
-                    clearInterval(this.scene.landuseTypewriterInterval);
-                    this.scene.landuseTypewriterInterval = null;
-                }
-            }, typeSpeed);
-        }
-    }
+    // handleInfoMode() removed - now handled by TileTypesManager.displayTileInfo()
 
     // ========================================================================
     // HELPER METHODS - Position Calculation
@@ -1258,10 +1210,10 @@ export class TileInteractionManager {
                         this.scene.saveState();
                     }
 
-                    // Emit event for all upgrades
+                    // Emit event for cluster upgrade completion
                     this.scene.emitter.emit('TILE_PLACED', {
                         oldTileType: currentType,
-                        newTileType: solarType
+                        newTileType: newTileType
                     });
                 }
             }, orderIndex * delayPerTile);
