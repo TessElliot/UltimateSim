@@ -39,8 +39,14 @@ export class TileInteractionManager {
         // tile.on('pointerout', (pointer) => this.handlePointerOut(tile, pointer));
     }
 
+    // ========================================================================
+    // OBSOLETE METHODS - Now handled by TileTypesManager (TileManager)
+    // These methods are kept for reference but are no longer called
+    // ========================================================================
+
     /**
-     * POINTEROVER - Show hover effects and validate placement
+     * OBSOLETE: POINTEROVER - Show hover effects and validate placement
+     * NOW HANDLED BY: TileTypesManager.handleBaseTileHover()
      */
     handlePointerOver(tile, pointer) {
         // Reset arrays
@@ -121,7 +127,8 @@ export class TileInteractionManager {
     }
 
     /**
-     * POINTERDOWN - Actually place the tile
+     * OBSOLETE: POINTERDOWN - Actually place the tile
+     * NOW HANDLED BY: TileTypesManager.handleBaseTileClick()
      */
     handlePointerDown(tile, pointer) {
         console.log(`🎯 TileInteractionManager.handlePointerDown CALLED - tile: ${tile.texture.key}, destroy: ${this.scene.gameState.destroy}, placeTile: ${this.scene.gameState.placeTile}`);
@@ -256,7 +263,8 @@ export class TileInteractionManager {
     }
 
     /**
-     * POINTEROUT - Clear hover effects
+     * OBSOLETE: POINTEROUT - Clear hover effects
+     * NOW HANDLED BY: TileTypesManager.handleBaseTileOut()
      */
     handlePointerOut(tile, pointer) {
         // Don't clear tints if 'A' is held (cluster preview mode)
@@ -792,7 +800,8 @@ export class TileInteractionManager {
     }
 
     /**
-     * Upgrade an entire cluster of connected tiles in spiral pattern
+     * OBSOLETE: Upgrade an entire cluster of connected tiles in spiral pattern
+     * NOW HANDLED BY: TileTypesManager.handleSolarClick() → applyUpgradeInSpiral()
      */
     upgradeCluster(clickedTile, upgradeType) {
         const currentTileType = clickedTile.texture.key;
@@ -822,8 +831,8 @@ export class TileInteractionManager {
     }
 
     /**
-     * Upgrade an entire greenery cluster to a specific tile type in spiral pattern
-     * Used for: A + Solar → powerplant, A + Trees → wood
+     * OBSOLETE: Upgrade an entire greenery cluster to a specific tile type in spiral pattern
+     * NOW HANDLED BY: TileTypesManager.handleSolarClick() → applyUpgradeInSpiral()
      */
     upgradeGreeneryClusterToTile(clickedTile, targetTileType) {
         console.log(`🌀 Upgrading greenery cluster to: ${targetTileType}`);
@@ -850,7 +859,8 @@ export class TileInteractionManager {
     }
 
     /**
-     * Find all tiles connected to the start tile with the same type
+     * OBSOLETE: Find all tiles connected to the start tile with the same type
+     * NOW HANDLED BY: TileTypesManager.findConnectedTilesOfSameTexture()
      */
     findConnectedTilesOfSameType(startTile, tileType) {
         const visited = new Set();
@@ -887,8 +897,8 @@ export class TileInteractionManager {
     }
 
     /**
-     * Find all tiles connected to the start tile with the same CATEGORY
-     * Used for greenery cluster operations (finds grass+park+forest together)
+     * OBSOLETE: Find all tiles connected to the start tile with the same CATEGORY
+     * NOW HANDLED BY: TileTypesManager.findConnectedTilesOfCategory()
      */
     findConnectedTilesOfCategory(startTile, category) {
         const visited = new Set();
@@ -1112,7 +1122,8 @@ export class TileInteractionManager {
     }
 
     /**
-     * Apply upgrade to cluster in spiral pattern from center
+     * OBSOLETE: Apply upgrade to cluster in spiral pattern from center
+     * NOW HANDLED BY: TileTypesManager.applyUpgradeInSpiral()
      */
     applyClusterUpgradeInSpiral(tiles, centerTile, upgradeType, targetTileType = null) {
         if (!tiles || tiles.length === 0) return;
