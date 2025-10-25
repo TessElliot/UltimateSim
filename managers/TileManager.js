@@ -298,32 +298,25 @@ export default class TileManager {
         }
 
         // Find connected ground tiles
-        const connectedTiles = this.findConnectedGroundTiles(tile);
-        console.log(`💨 Found ${connectedTiles.length} connected ground tiles`);
+        const cluster = this.findConnectedGroundTiles(tile);
+        console.log(`💨 Found cluster of ${cluster.length} ground tiles`);
 
-        if (connectedTiles.length === 0) {
-            console.log(`⚠️ No connected ground tiles found`);
-            tile.setTint(0xff0000); // Red = invalid
-            this.tintedCluster = [tile];
-            this.savedClusterForUpgrade = [];
-            return;
-        }
+        // ALWAYS save cluster for click handler (even if not showing spiral)
+        this.savedClusterForUpgrade = cluster;
+        this.currentUpgradeMode = 'wind';
 
-        const centerTile = this.findClusterCenter(connectedTiles);
         const tintColor = 0x00ffff; // Cyan for wind
 
         if (!spiralMode) {
-            // Single tile mode: tint only the hovered tile
+            // Spiral mode OFF: Tint ONLY the hovered tile
+            console.log(`🎯 Spiral mode OFF - tinting single tile ${index}`);
             tile.setTint(tintColor);
             this.tintedCluster = [tile];
-            this.savedClusterForUpgrade = [tile];
-            console.log(`💨 Single tile mode - tinted 1 tile`);
         } else {
-            // Spiral mode: tint entire cluster
-            this.applyTintInSpiral(connectedTiles, centerTile, tintColor);
-            this.tintedCluster = connectedTiles;
-            this.savedClusterForUpgrade = connectedTiles;
-            console.log(`💨 Spiral mode - tinting ${connectedTiles.length} tiles`);
+            // Spiral mode ON: Tint entire cluster in spiral
+            console.log(`🌀 Spiral mode ON - spiral tinting ${cluster.length} tiles`);
+            this.tintedCluster = cluster;
+            this.applyTintInSpiral(cluster, tile, tintColor);
         }
     }
 
