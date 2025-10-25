@@ -157,6 +157,9 @@ export default class TileManager {
             case 'wind':
                 this.applyWindTint(tile, index);
                 break;
+            case 'destroy':
+                this.applyDestroyTint(tile, index);
+                break;
             case 'info':
                 this.displayTileInfo(tile, index);
                 break;
@@ -267,6 +270,20 @@ export default class TileManager {
             this.tintedCluster = cluster;
             this.applyTintInSpiral(cluster, tile, 0x00ff00);
         }
+    }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Apply destroy/bulldoze tinting - full white overlay
+     */
+    applyDestroyTint(tile, index) {
+        console.log(`🔨 applyDestroyTint - tile ${index}`);
+
+        // Full white tint (0xffffff) with full fill to completely whiten the tile
+        tile.setTint(0xffffff);
+        tile.setTintFill(0xffffff); // This makes it solid white, not just tinted
+        this.tintedCluster = [tile];
+        this.savedClusterForUpgrade = [];
     }
 
     /**
