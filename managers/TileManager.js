@@ -307,7 +307,7 @@ export default class TileManager {
             tile.setPipeline('RumbleDistortion');
             const pipeline = tile.pipeline;
             if (pipeline) {
-                pipeline.intensity = 0.10;  // Strong pixel distortion for urgency
+                pipeline.intensity = 0.02;  // Subtle pixel distortion (reduced by 80%)
                 pipeline.frequency = 35;    // Medium wave density for organic feel
             }
             this.rumbledTiles.push(tile);

@@ -65,10 +65,18 @@ body.loaded {
     clip-path: url(#wave-clip-inverse); /* Inverse wave clip with ripples at top */
     pointer-events: none; /* Stream is decorative only */
     --stream-center: 0.85; /* CSS variable for stream wave center position */
+    mask-image:
+        repeating-linear-gradient(90deg,
+            rgba(0,0,0,0.5) 0%,
+            rgba(0,0,0,1) 5%,
+            rgba(0,0,0,0.5) 10%);
+    mask-size: 200% 100%;
+    mask-position: 0% 0%;
+    animation: opacityBandsReverse 20s linear infinite;
 }
 
 #the-stream.lowered {
-    animation: lowerStream 2s ease-in forwards;
+    animation: lowerStream 2s ease-in forwards, opacityBandsReverse 20s linear infinite;
 }
 
 @keyframes lowerStream {
@@ -168,7 +176,7 @@ canvas {
     font-family: 'Press Start 2P', cursive;
     font-size: 1.3vw;
     font-weight: bold;
-    color: #a7e3ff;
+    color: #ff6633;
     text-shadow:
         -1px -1px 0 #000,
         1px -1px 0 #000,
@@ -180,34 +188,36 @@ canvas {
     white-space: nowrap;
     position: fixed;
     top: 20px;
-    left: 20px;
-    transform: scaleX(0.85);
+    left: auto;
+    right: 20px;
+    transform: translateY(0) scaleX(0.85);
     z-index: 3100;
-    transition: opacity 0.5s ease, top 1s ease, left 1s ease, right 1s ease, transform 1s ease, font-size 1s ease;
+    transition: opacity 0.5s ease;
+    animation: rainbowText 3s linear infinite;
 }
 
 #climate-score.show {
     opacity: 1;
 }
 
-#climate-score.intro {
+/* #climate-score.intro {
     /* Intro state: center screen with large size and rainbow animation */
-    top: 50%;
+    /* top: 50%;
     left: 50%;
     right: auto;
     transform: translate(-50%, -50%) scaleX(0.85);
     font-size: 2.15vw;
     animation: rainbowShadowNoBlur 3s linear infinite;
-}
+} */
 
-#climate-score.positioned {
+/* #climate-score.positioned {
     /* Final state: top-right corner */
-    top: 20px;
+    /* top: 20px;
     left: auto;
     right: 20px;
     transform: translateY(0) scaleX(0.85);
     font-size: 1.3vw;
-}
+} */
 
 #climate-score.score-update {
     animation: rainbowShadowNoBlur 3s linear;
@@ -700,6 +710,15 @@ canvas {
     }
     100% {
         mask-position: 0% 0%;
+    }
+}
+
+@keyframes opacityBandsReverse {
+    0% {
+        mask-position: 0% 0%;
+    }
+    100% {
+        mask-position: 100% 0%;
     }
 }
 
