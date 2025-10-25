@@ -4,7 +4,7 @@ import { SaveLoadManager } from "../managers/SaveLoadManager.js";
 import { RotationHelper } from "../helpers/RotationHelper.js";
 import { ClimateManager } from "../managers/ClimateManager.js";
 import { TileInteractionManager } from "../managers/TileInteractionManager.js";
-import TileTypesManager from "../managers/TileTypesManager.js";
+import TileManager from "../managers/TileManager.js";
 import { MapDataService } from "../services/MapDataService.js";
 import { processBoundingBoxes } from "../services/os.js";
 import { fetchLocation, fetchLatLon } from "../services/os.js";
@@ -64,7 +64,7 @@ export class GameScene extends Phaser.Scene {
         this.mapDataService = new MapDataService();
         this.climateManager = new ClimateManager(this);
         this.tileInteractionManager = new TileInteractionManager(this, gridToTileKey, tileWidth, tileHeight);
-        this.tileTypesManager = new TileTypesManager(this);
+        this.tileManager = new TileManager(this);
         this.getInfo = null;
         this.tileChanges = []; // To store tile modifications
         this.startX = 0;
@@ -816,8 +816,8 @@ export class GameScene extends Phaser.Scene {
                 // Update climate score immediately when first tile appears
                 this.climateManager.recalculateScore();
 
-                // Initialize TileTypesManager for base hover interactions
-                this.tileTypesManager.initialize();
+                // Initialize TileManager for base hover interactions
+                this.tileManager.initialize();
             } else if (listenersActivated) {
                 // After activation: add listener to just the newest tile
                 const newestTile = this.mapTiles[this.mapTiles.length - 1];

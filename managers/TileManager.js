@@ -1,9 +1,12 @@
 /**
- * TileTypesManager
- * Manages categorization of tiles and provides base hover interactions
- * Independent of tool/mode-based interactions
+ * TileManager (formerly TileTypesManager)
+ * Unified tile interaction manager - handles ALL tile interactions
+ * - Categorization (commercial, industrial, residential, greenery)
+ * - Hover/click/out event handling
+ * - Tinting (base mode, solar mode, trees mode, wind mode, info mode)
+ * - Cluster finding and upgrades
  */
-export default class TileTypesManager {
+export default class TileManager {
     constructor(scene) {
         this.scene = scene;
 

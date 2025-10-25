@@ -25,14 +25,14 @@ export class TileInteractionManager {
      * Add all event listeners to a tile (hover, click, out)
      */
     addListenerToTile(tile) {
-        // Register tile with TileTypesManager for base hover interactions FIRST
+        // Register tile with TileManager for base hover interactions FIRST
         const tileIndex = this.scene.mapTiles.indexOf(tile);
-        if (tileIndex !== -1 && this.scene.tileTypesManager) {
-            this.scene.tileTypesManager.registerTile(tile, tileIndex);
+        if (tileIndex !== -1 && this.scene.tileManager) {
+            this.scene.tileManager.registerTile(tile, tileIndex);
         }
 
         // UNIFIED ARCHITECTURE:
-        // TileTypesManager now handles ALL pointer interactions (hover, click, out)
+        // TileManager now handles ALL pointer interactions (hover, click, out)
         // The handlers below are commented out to prevent duplicate event handling
         // tile.on('pointerover', (pointer) => this.handlePointerOver(tile, pointer));
         // tile.on('pointerdown', (pointer) => this.handlePointerDown(tile, pointer));
@@ -40,13 +40,13 @@ export class TileInteractionManager {
     }
 
     // ========================================================================
-    // OBSOLETE METHODS - Now handled by TileTypesManager (TileManager)
+    // OBSOLETE METHODS - Now handled by TileManager (TileManager)
     // These methods are kept for reference but are no longer called
     // ========================================================================
 
     /**
      * OBSOLETE: POINTEROVER - Show hover effects and validate placement
-     * NOW HANDLED BY: TileTypesManager.handleBaseTileHover()
+     * NOW HANDLED BY: TileManager.handleBaseTileHover()
      */
     handlePointerOver(tile, pointer) {
         // Reset arrays
@@ -65,7 +65,7 @@ export class TileInteractionManager {
         const tile0 = this.scene.mapTiles.indexOf(tile);
         const useType = this.scene.mapArray[tile0];
 
-        // Info mode is now handled by TileTypesManager.displayTileInfo()
+        // Info mode is now handled by TileManager.displayTileInfo()
         if (this.scene.gameState.infoBool) {
             return;
         }
@@ -83,7 +83,7 @@ export class TileInteractionManager {
 
         // Only show placement feedback if a tool is active
         if (hasActiveTool) {
-            const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(useType);
+            const category = this.scene.tileManager && this.scene.tileManager.getTileCategory(useType);
 
             // === A KEY HELD = CLUSTER PREVIEW MODE ===
             if (this.scene.inputManager && this.scene.inputManager.spiralMode) {
@@ -123,12 +123,12 @@ export class TileInteractionManager {
             // Validate and show green/red tint
             this.validateAndShowPlacementFeedback(tile0);
         }
-        // If no tool active, do nothing - let TileTypesManager handle base tinting
+        // If no tool active, do nothing - let TileManager handle base tinting
     }
 
     /**
      * OBSOLETE: POINTERDOWN - Actually place the tile
-     * NOW HANDLED BY: TileTypesManager.handleBaseTileClick()
+     * NOW HANDLED BY: TileManager.handleBaseTileClick()
      */
     handlePointerDown(tile, pointer) {
         console.log(`🎯 TileInteractionManager.handlePointerDown CALLED - tile: ${tile.texture.key}, destroy: ${this.scene.gameState.destroy}, placeTile: ${this.scene.gameState.placeTile}`);
@@ -165,7 +165,7 @@ export class TileInteractionManager {
         // Check if 'A' is held + upgrade/trees mode = cluster upgrade
         if (this.scene.inputManager && this.scene.inputManager.spiralMode && this.scene.gameState.upgrade) {
             const landUse = this.scene.mapArray[tile0];
-            const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
+            const category = this.scene.tileManager && this.scene.tileManager.getTileCategory(landUse);
 
             if (category === 'greenery' && this.scene.gameState.upgrade === 'solar') {
                 // A + Solar over greenery → upgrade cluster to powerplant
@@ -178,7 +178,7 @@ export class TileInteractionManager {
             }
         } else if (this.scene.inputManager && this.scene.inputManager.spiralMode && this.scene.gameState.trees) {
             const landUse = this.scene.mapArray[tile0];
-            const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
+            const category = this.scene.tileManager && this.scene.tileManager.getTileCategory(landUse);
 
             if (category === 'greenery') {
                 // A + Trees over greenery → upgrade cluster to wood
@@ -187,7 +187,7 @@ export class TileInteractionManager {
             }
         } else if (this.scene.gameState.upgrade) {
             const landUse = this.scene.mapArray[tile0];
-            const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
+            const category = this.scene.tileManager && this.scene.tileManager.getTileCategory(landUse);
 
             if (category === 'greenery' && this.scene.gameState.upgrade === 'solar') {
                 // Solar over greenery (no A) → place single powerplant
@@ -264,7 +264,7 @@ export class TileInteractionManager {
 
     /**
      * OBSOLETE: POINTEROUT - Clear hover effects
-     * NOW HANDLED BY: TileTypesManager.handleBaseTileOut()
+     * NOW HANDLED BY: TileManager.handleBaseTileOut()
      */
     handlePointerOut(tile, pointer) {
         // Don't clear tints if 'A' is held (cluster preview mode)
@@ -307,7 +307,7 @@ export class TileInteractionManager {
     // ========================================================================
     // HELPER METHODS - Info Mode
     // ========================================================================
-    // handleInfoMode() removed - now handled by TileTypesManager.displayTileInfo()
+    // handleInfoMode() removed - now handled by TileManager.displayTileInfo()
 
     // ========================================================================
     // HELPER METHODS - Position Calculation
@@ -425,8 +425,8 @@ export class TileInteractionManager {
     canPlaceTile(tile0) {
         const currentTexture = this.mapTexArray[0];
         const landUse = this.scene.mapArray[tile0];
-        const isGreenery = this.scene.tileTypesManager &&
-                          this.scene.tileTypesManager.getTileCategory(landUse) === 'greenery';
+        const isGreenery = this.scene.tileManager &&
+                          this.scene.tileManager.getTileCategory(landUse) === 'greenery';
 
         // Destroy mode - check FIRST (doesn't require greenery)
         if (this.scene.gameState.destroy) {
@@ -472,7 +472,7 @@ export class TileInteractionManager {
                 const tileIndex = this.scene.mapTiles.indexOf(tile);
                 if (tileIndex === -1) return false;
                 const tileLandUse = this.scene.mapArray[tileIndex];
-                return this.scene.tileTypesManager.getTileCategory(tileLandUse) === 'greenery';
+                return this.scene.tileManager.getTileCategory(tileLandUse) === 'greenery';
             });
 
             return allGreenery && this.mapTexArray.every(tex => tex === "ground");
@@ -801,7 +801,7 @@ export class TileInteractionManager {
 
     /**
      * OBSOLETE: Upgrade an entire cluster of connected tiles in spiral pattern
-     * NOW HANDLED BY: TileTypesManager.handleSolarClick() → applyUpgradeInSpiral()
+     * NOW HANDLED BY: TileManager.handleSolarClick() → applyUpgradeInSpiral()
      */
     upgradeCluster(clickedTile, upgradeType) {
         const currentTileType = clickedTile.texture.key;
@@ -832,7 +832,7 @@ export class TileInteractionManager {
 
     /**
      * OBSOLETE: Upgrade an entire greenery cluster to a specific tile type in spiral pattern
-     * NOW HANDLED BY: TileTypesManager.handleSolarClick() → applyUpgradeInSpiral()
+     * NOW HANDLED BY: TileManager.handleSolarClick() → applyUpgradeInSpiral()
      */
     upgradeGreeneryClusterToTile(clickedTile, targetTileType) {
         console.log(`🌀 Upgrading greenery cluster to: ${targetTileType}`);
@@ -860,7 +860,7 @@ export class TileInteractionManager {
 
     /**
      * OBSOLETE: Find all tiles connected to the start tile with the same type
-     * NOW HANDLED BY: TileTypesManager.findConnectedTilesOfSameTexture()
+     * NOW HANDLED BY: TileManager.findConnectedTilesOfSameTexture()
      */
     findConnectedTilesOfSameType(startTile, tileType) {
         const visited = new Set();
@@ -898,7 +898,7 @@ export class TileInteractionManager {
 
     /**
      * OBSOLETE: Find all tiles connected to the start tile with the same CATEGORY
-     * NOW HANDLED BY: TileTypesManager.findConnectedTilesOfCategory()
+     * NOW HANDLED BY: TileManager.findConnectedTilesOfCategory()
      */
     findConnectedTilesOfCategory(startTile, category) {
         const visited = new Set();
@@ -917,7 +917,7 @@ export class TileInteractionManager {
 
             // Check if this tile belongs to the target category
             const landUse = this.scene.mapArray[currentIndex];
-            const tileCategory = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
+            const tileCategory = this.scene.tileManager && this.scene.tileManager.getTileCategory(landUse);
 
             if (tileCategory === category) {
                 cluster.push(currentTile);
@@ -1017,7 +1017,7 @@ export class TileInteractionManager {
         console.log(`🌀 Starting spiral tint animation for ${spiralOrder.length} tiles from hovered tile at (${tile.x}, ${tile.y})`);
 
         // Show green tint on all tiles in cluster in spiral pattern
-        const delayPerTile = 10; // Same as TileTypesManager
+        const delayPerTile = 10; // Same as TileManager
         spiralOrder.forEach((clusterTile, orderIndex) => {
             const timeoutId = setTimeout(() => {
                 if (clusterTile && typeof clusterTile.setTint === 'function') {
@@ -1048,7 +1048,7 @@ export class TileInteractionManager {
     showGreeneryClusterPreview(tile, targetTileType) {
         const tile0 = this.scene.mapTiles.indexOf(tile);
         const landUse = this.scene.mapArray[tile0];
-        const category = this.scene.tileTypesManager && this.scene.tileTypesManager.getTileCategory(landUse);
+        const category = this.scene.tileManager && this.scene.tileManager.getTileCategory(landUse);
 
         console.log(`👁️ showGreeneryClusterPreview called - category: ${category}, target: ${targetTileType}`);
 
@@ -1123,7 +1123,7 @@ export class TileInteractionManager {
 
     /**
      * OBSOLETE: Apply upgrade to cluster in spiral pattern from center
-     * NOW HANDLED BY: TileTypesManager.applyUpgradeInSpiral()
+     * NOW HANDLED BY: TileManager.applyUpgradeInSpiral()
      */
     applyClusterUpgradeInSpiral(tiles, centerTile, upgradeType, targetTileType = null) {
         if (!tiles || tiles.length === 0) return;
@@ -1198,10 +1198,10 @@ export class TileInteractionManager {
                         }
                     }
 
-                    // Re-register with TileTypesManager to update category arrays
-                    if (this.scene.tileTypesManager && tileIndex !== -1) {
-                        console.log(`🔄 Re-registering tile ${tileIndex} with TileTypesManager`);
-                        this.scene.tileTypesManager.registerTile(tile, tileIndex);
+                    // Re-register with TileManager to update category arrays
+                    if (this.scene.tileManager && tileIndex !== -1) {
+                        console.log(`🔄 Re-registering tile ${tileIndex} with TileManager`);
+                        this.scene.tileManager.registerTile(tile, tileIndex);
                     }
 
                     // Emit climate event for EACH tile upgrade

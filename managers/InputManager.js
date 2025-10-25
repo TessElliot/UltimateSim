@@ -536,7 +536,7 @@ export class InputManager {
         // Find center of all upgradable tiles
         const centerTile = this.findCenterTile(upgradableTiles);
 
-        // Use the same spiral pattern as TileTypesManager
+        // Use the same spiral pattern as TileManager
         this.applyUpgradeInSpiral(upgradableTiles, centerTile);
     }
 
@@ -731,9 +731,9 @@ export class InputManager {
      * Called when A key or spacebar state changes while hovering
      */
     retriggerHoverEffect() {
-        // Get the currently hovered tile from TileTypesManager
-        if (this.scene.tileTypesManager && this.scene.tileTypesManager.hoveredTile) {
-            const hoveredTile = this.scene.tileTypesManager.hoveredTile;
+        // Get the currently hovered tile from TileManager
+        if (this.scene.tileManager && this.scene.tileManager.hoveredTile) {
+            const hoveredTile = this.scene.tileManager.hoveredTile;
             const hoveredIndex = this.scene.mapTiles.indexOf(hoveredTile);
 
             if (hoveredIndex !== -1) {
@@ -743,32 +743,32 @@ export class InputManager {
                 const tileRef = hoveredTile;
                 const indexRef = hoveredIndex;
 
-                console.log(`   🧹 Clearing ${this.scene.tileTypesManager.activeTimeouts.length} active timeouts`);
-                console.log(`   🧹 isAnimating BEFORE: ${this.scene.tileTypesManager.isAnimating}`);
+                console.log(`   🧹 Clearing ${this.scene.tileManager.activeTimeouts.length} active timeouts`);
+                console.log(`   🧹 isAnimating BEFORE: ${this.scene.tileManager.isAnimating}`);
 
                 // Clear existing tints and animation state
-                this.scene.tileTypesManager.clearAnimationTimeouts();
-                this.scene.tileTypesManager.isAnimating = false;
+                this.scene.tileManager.clearAnimationTimeouts();
+                this.scene.tileManager.isAnimating = false;
 
-                console.log(`   🧹 isAnimating AFTER: ${this.scene.tileTypesManager.isAnimating}`);
+                console.log(`   🧹 isAnimating AFTER: ${this.scene.tileManager.isAnimating}`);
 
                 // Clear tints without resetting hoveredTile
-                if (this.scene.tileTypesManager.tintedCluster && this.scene.tileTypesManager.tintedCluster.length > 0) {
-                    console.log(`   🧹 Clearing tints from ${this.scene.tileTypesManager.tintedCluster.length} tiles`);
-                    this.scene.tileTypesManager.tintedCluster.forEach(clusterTile => {
+                if (this.scene.tileManager.tintedCluster && this.scene.tileManager.tintedCluster.length > 0) {
+                    console.log(`   🧹 Clearing tints from ${this.scene.tileManager.tintedCluster.length} tiles`);
+                    this.scene.tileManager.tintedCluster.forEach(clusterTile => {
                         if (clusterTile && typeof clusterTile.clearTint === 'function') {
                             clusterTile.clearTint();
                         }
                     });
                 }
-                this.scene.tileTypesManager.tintedCluster = [];
+                this.scene.tileManager.tintedCluster = [];
 
                 // Get the current pointer position
                 const pointer = this.scene.input.activePointer;
 
                 console.log(`   ✨ Re-triggering handleBaseTileHover`);
                 // Re-trigger the hover handler
-                this.scene.tileTypesManager.handleBaseTileHover(tileRef, indexRef, pointer);
+                this.scene.tileManager.handleBaseTileHover(tileRef, indexRef, pointer);
             }
         }
     }
