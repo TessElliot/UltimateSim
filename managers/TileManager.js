@@ -762,6 +762,11 @@ export default class TileManager {
 
         const oldTileType = tile.texture.key;
 
+        // Clear the white tint before animation
+        if (tile.clearTint) {
+            tile.clearTint();
+        }
+
         // Play bulldozing animation
         if (this.scene.anims.exists('bulldozing')) {
             tile.play('bulldozing');
