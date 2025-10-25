@@ -38,6 +38,10 @@ export default class TileTypesManager {
 
         // Track which tiles have been registered to prevent duplicate listeners
         this.registeredTiles = new Set();
+
+        // NEW UNIFIED ARCHITECTURE: Store cluster for upgrade on click
+        this.savedClusterForUpgrade = [];
+        this.currentUpgradeMode = null;
     }
 
     /**
@@ -120,43 +124,196 @@ export default class TileTypesManager {
     }
 
     /**
-     * Handle base tile hover - shows category-based tint
-     * This runs BEFORE any tool/mode interactions
-     * Tints all connected tiles of the same category (flood-fill) with SPIRAL ANIMATION
+     * NEW UNIFIED ARCHITECTURE:
+     * Handle base tile hover - routes to appropriate tinting method based on mode
+     * This is the SINGLE ENTRY POINT for all hover interactions
      */
     handleBaseTileHover(tile, index, pointer) {
         console.log(`🌟 TileTypesManager.handleBaseTileHover called for tile ${index}`);
 
-        // Only apply base tinting if no active tool/mode is selected
-        const shouldApply = this.shouldApplyBaseTint();
-        console.log(`🔍 shouldApplyBaseTint returned: ${shouldApply}`);
+        const mode = this.getTintingMode();
+        console.log(`🎮 Current mode: ${mode}`);
 
-        if (shouldApply) {
-            // Skip if already animating to prevent performance issues
-            if (this.isAnimating) {
-                return;
-            }
+        // Skip if already animating to prevent performance issues
+        if (this.isAnimating) {
+            return;
+        }
 
-            this.hoveredTile = tile;
+        this.hoveredTile = tile;
 
-            // Determine category and apply appropriate tint
-            const landUse = this.scene.mapArray[index];
-            let category = this.getTileCategory(landUse);
+        switch(mode) {
+            case 'base':
+                this.applyBaseCategoryTint(tile, index);
+                break;
+            case 'solar':
+                this.applySolarTint(tile, index);
+                break;
+            case 'trees':
+                this.applyTreesTint(tile, index);
+                break;
+            case 'wind':
+                this.applyWindTint(tile, index);
+                break;
+            case 'info':
+                this.displayTileInfo(tile, index);
+                break;
+            case 'none':
+                // Do nothing (navigation mode)
+                break;
+            default:
+                // Unknown mode - do nothing
+                break;
+        }
+    }
 
-            if (category) {
-                this.hoveredCategory = category;
-                const tintColor = this.categoryColors[category];
+    // OLD ARCHITECTURE - COMMENTED OUT:
+    // handleBaseTileHover(tile, index, pointer) {
+    //     console.log(`🌟 TileTypesManager.handleBaseTileHover called for tile ${index}`);
+    //     const shouldApply = this.shouldApplyBaseTint();
+    //     console.log(`🔍 shouldApplyBaseTint returned: ${shouldApply}`);
+    //     if (shouldApply) {
+    //         if (this.isAnimating) return;
+    //         this.hoveredTile = tile;
+    //         const landUse = this.scene.mapArray[index];
+    //         let category = this.getTileCategory(landUse);
+    //         if (category) {
+    //             this.hoveredCategory = category;
+    //             const tintColor = this.categoryColors[category];
+    //             const connectedTiles = this.findConnectedTilesOfCategory(tile, category);
+    //             this.tintedCluster = connectedTiles;
+    //             this.applyTintInSpiral(connectedTiles, tile, tintColor);
+    //             console.log(`✨ Tile ${index} (${landUse}) - ${category} cluster tint applied to ${connectedTiles.length} connected tiles`);
+    //         }
+    //     }
+    // }
 
-                // Find all connected tiles of the same category using flood-fill
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Apply base category tinting (no tools active)
+     * No A key: Tint only hovered tile
+     * A key held: Tint entire cluster in spiral
+     */
+    applyBaseCategoryTint(tile, index) {
+        const landUse = this.scene.mapArray[index];
+        let category = this.getTileCategory(landUse);
+
+        if (category) {
+            this.hoveredCategory = category;
+            const tintColor = this.categoryColors[category];
+
+            // Check if spiral mode is enabled
+            const spiralMode = this.scene.inputManager?.spiralMode;
+
+            if (!spiralMode) {
+                // Spiral mode OFF: Tint ONLY the hovered tile
+                console.log(`🎯 Spiral mode OFF - tinting single tile ${index} (${landUse})`);
+                tile.setTint(tintColor);
+                this.tintedCluster = [tile];
+            } else {
+                // Spiral mode ON: Tint entire cluster in spiral
+                console.log(`🌀 Spiral mode ON - tinting cluster for tile ${index} (${landUse})`);
                 const connectedTiles = this.findConnectedTilesOfCategory(tile, category);
-
-                // Store the tinted tiles for cleanup later
                 this.tintedCluster = connectedTiles;
-
-                // Apply tint with spiral animation FROM the hovered tile
                 this.applyTintInSpiral(connectedTiles, tile, tintColor);
+                console.log(`✨ ${category} cluster tint applied to ${connectedTiles.length} connected tiles`);
+            }
+        }
+    }
 
-                console.log(`✨ Tile ${index} (${landUse}) - ${category} cluster tint applied to ${connectedTiles.length} connected tiles`);
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Apply solar tinting based on A key state
+     * No A key: Tint only hovered tile
+     * A key held: Spiral tint entire cluster
+     * MATCHES the pattern of applyBaseCategoryTint for consistency
+     */
+    applySolarTint(tile, index) {
+        const landUse = this.scene.mapArray[index];
+        const category = this.getTileCategory(landUse);
+        const spiralMode = this.scene.inputManager?.spiralMode;
+
+        console.log(`☀️ applySolarTint - category: ${category}, spiral mode: ${spiralMode}`);
+
+        // Solar works on: residential OR greenery
+        if (category !== 'residential' && category !== 'greenery') {
+            console.log(`❌ Solar doesn't work on ${category} - showing red tint`);
+            tile.setTint(0xff0000);
+            this.tintedCluster = [tile];
+            this.savedClusterForUpgrade = [];
+            return;
+        }
+
+        // Find cluster by category (always find it, so we have it saved for click)
+        // Works for both greenery (grass + park + forest) and residential (house + house_b + apartment)
+        const cluster = this.findConnectedTilesOfCategory(tile, category);
+
+        console.log(`✨ Found cluster of ${cluster.length} tiles`);
+
+        // ALWAYS save cluster for click handler (even if not showing spiral)
+        this.savedClusterForUpgrade = cluster;
+        this.currentUpgradeMode = 'solar';
+
+        if (!spiralMode) {
+            // Spiral mode OFF: Tint ONLY the hovered tile
+            console.log(`🎯 Spiral mode OFF - tinting single tile ${index}`);
+            tile.setTint(0x00ff00);
+            this.tintedCluster = [tile];
+        } else {
+            // Spiral mode ON: Tint entire cluster in spiral
+            console.log(`🌀 Spiral mode ON - spiral tinting ${cluster.length} tiles`);
+            this.tintedCluster = cluster;
+            this.applyTintInSpiral(cluster, tile, 0x00ff00);
+        }
+    }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Apply trees tinting - to be implemented
+     */
+    applyTreesTint(tile, index) {
+        console.log(`🌲 applyTreesTint - TODO: implement`);
+        // TODO: Similar to solar, but only works on greenery
+    }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Apply wind tinting - to be implemented
+     */
+    applyWindTint(tile, index) {
+        console.log(`💨 applyWindTint - TODO: implement`);
+        // TODO: Similar to solar, but only works on greenery
+    }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Display tile info when in info mode (spacebar held)
+     */
+    displayTileInfo(tile, index, pointer) {
+        const landUse = this.scene.mapArray[index];
+        const textureKey = tile.texture.key;
+        const category = this.getTileCategory(landUse);
+
+        // Dim all tiles except the hovered one
+        this.scene.mapTiles.forEach(mapTex => {
+            if (mapTex) mapTex.setAlpha(0.2);
+        });
+
+        // Highlight current tile to full opacity
+        if (tile) {
+            tile.setAlpha(1.0);
+        }
+
+        if (this.scene.infoTextElement) {
+            const infoText = `Tile ${index} | Texture: "${textureKey}" | Land Use: "${landUse}" | Category: "${category || 'none'}"`;
+            this.scene.infoTextElement.textContent = infoText;
+            this.scene.infoTextElement.classList.add('show');
+
+            // Position the info box near the cursor (if pointer is available)
+            if (pointer) {
+                const offsetX = 15; // 15px to the right of cursor
+                const offsetY = 15; // 15px below cursor
+                this.scene.infoTextElement.style.left = (pointer.x + offsetX) + 'px';
+                this.scene.infoTextElement.style.top = (pointer.y + offsetY) + 'px';
             }
         }
     }
@@ -270,110 +427,383 @@ export default class TileTypesManager {
     }
 
     /**
-     * Handle base tile out - removes category-based tint from cluster
+     * NEW UNIFIED ARCHITECTURE:
+     * Find all tiles connected to start tile with EXACT SAME TEXTURE
+     * Used for residential cluster upgrades (house with house only, not mixed residential types)
+     */
+    findConnectedTilesOfSameTexture(startTile, textureKey) {
+        const visited = new Set();
+        const connectedTiles = [];
+        const queue = [startTile];
+
+        while (queue.length > 0) {
+            const currentTile = queue.shift();
+            const currentIndex = this.scene.mapTiles.indexOf(currentTile);
+
+            if (currentIndex === -1 || visited.has(currentIndex)) continue;
+            if (currentTile.texture.key !== textureKey) continue;
+
+            visited.add(currentIndex);
+            connectedTiles.push(currentTile);
+
+            // Get 4-directional neighbors
+            const neighbors = this.scene.mapTiles.filter(tile => {
+                const dx = Math.abs(tile.x - currentTile.x);
+                const dy = Math.abs(tile.y - currentTile.y);
+                return (dx === 32 && dy === 0) || (dx === 0 && dy === 32);
+            });
+
+            neighbors.forEach(neighbor => {
+                const neighborIndex = this.scene.mapTiles.indexOf(neighbor);
+                if (!visited.has(neighborIndex) && neighbor.texture.key === textureKey) {
+                    queue.push(neighbor);
+                }
+            });
+        }
+
+        return connectedTiles;
+    }
+
+    /**
+     * Handle base tile out - removes tint from cluster
      */
     handleBaseTileOut(tile) {
-        // Only clear base tinting if no active tool/mode is selected
-        if (this.shouldApplyBaseTint()) {
-            if (this.hoveredTile === tile) {
-                // Cancel any ongoing animation timeouts
-                this.clearAnimationTimeouts();
+        if (this.hoveredTile === tile) {
+            // Cancel any ongoing animation timeouts
+            this.clearAnimationTimeouts();
 
-                // Clear tint from all tiles in the cluster
-                if (this.tintedCluster && this.tintedCluster.length > 0) {
-                    this.tintedCluster.forEach(clusterTile => {
-                        if (clusterTile && typeof clusterTile.clearTint === 'function') {
-                            clusterTile.clearTint();
-                        }
-                    });
-                }
-
-                // Reset tracking variables
-                this.hoveredTile = null;
-                this.hoveredCategory = null;
-                this.tintedCluster = [];
-            }
+            // Clear all tints using utility method
+            this.clearAllTints();
         }
     }
 
     /**
-     * Handle base tile click - auto-place trees on green-tinted tiles
-     * ONLY works on tiles that are currently showing green tint (hover + click)
+     * NEW UNIFIED ARCHITECTURE:
+     * Handle base tile click - routes to appropriate handler based on mode
      */
     handleBaseTileClick(tile, index, pointer) {
-        // Only auto-place if no active tool/mode is selected
-        if (this.shouldApplyBaseTint()) {
+        console.log(`⚫ TileTypesManager.handleBaseTileClick - tile ${index}`);
 
-            // NEW: If A key is held, don't auto-place - let TileInteractionManager handle cluster upgrade
-            if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld) {
-                console.log(`🔑 A key held - skipping auto-placement, TileInteractionManager will handle cluster upgrade`);
-                return;
-            }
+        const mode = this.getTintingMode();
+        console.log(`🎮 Click mode: ${mode}`);
 
-            // Check if this tile is part of the currently tinted cluster
-            const isTinted = this.tintedCluster && this.tintedCluster.includes(tile);
+        // Debug: Show tintedCluster state
+        console.log(`🔍 tintedCluster length: ${this.tintedCluster ? this.tintedCluster.length : 0}`);
+        console.log(`🔍 Clicked tile in tintedCluster? ${this.tintedCluster && this.tintedCluster.includes(tile)}`);
+        console.log(`🔍 savedClusterForUpgrade length: ${this.savedClusterForUpgrade ? this.savedClusterForUpgrade.length : 0}`);
 
-            // Check if the tinted cluster is greenery (green tint)
-            const isGreenTinted = this.hoveredCategory === 'greenery';
+        // Only handle clicks if tile is in tinted cluster
+        if (!this.tintedCluster || !this.tintedCluster.includes(tile)) {
+            console.log(`⚠️ Tile not in tinted cluster - ignoring click`);
+            console.log(`⚠️ This might be because pointerout cleared the tint before click registered`);
+            return;
+        }
 
-            // ONLY place trees if the tile is currently showing green tint
-            if (isTinted && isGreenTinted) {
-                console.log(`🌳 Auto-placing trees on green-tinted tile ${index}`);
+        switch(mode) {
+            case 'base':
+                this.handleBaseClick(tile, index);
+                break;
 
-                // Activate trees mode temporarily
-                this.scene.gameState.resetAllModes();
-                this.scene.gameState.trees = true;
-                this.scene.gameState.smallTile = true;
-                this.scene.gameState.placeTile = true;
-                this.scene.gameState.newTile = 'wood';
+            case 'solar':
+                this.handleSolarClick(tile, index);
+                break;
 
-                // Let the TileInteractionManager handle the actual placement
-                // by triggering its pointerdown handler
-                // (this will automatically validate and place the tree)
+            case 'trees':
+                this.handleTreesClick(tile, index);
+                break;
 
-                // After placement, reset back to initial interaction state (no tint)
-                // Use setTimeout to let the placement complete first
-                setTimeout(() => {
-                    this.scene.gameState.resetAllModes();
-                    // Clear any tints to return to initial state
-                    if (this.tintedCluster && this.tintedCluster.length > 0) {
-                        this.tintedCluster.forEach(clusterTile => {
-                            if (clusterTile && typeof clusterTile.clearTint === 'function') {
-                                clusterTile.clearTint();
-                            }
-                        });
-                    }
-                    this.tintedCluster = [];
-                    this.hoveredTile = null;
-                    this.hoveredCategory = null;
-                }, 50);
-            }
+            case 'wind':
+                this.handleWindClick(tile, index);
+                break;
+
+            default:
+                console.log(`⚠️ No click handler for mode: ${mode}`);
+                break;
         }
     }
 
+    // OLD ARCHITECTURE - COMMENTED OUT:
+    // handleBaseTileClick(tile, index, pointer) {
+    //     if (this.shouldApplyBaseTint()) {
+    //         if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld) {
+    //             console.log(`🔑 A key held - skipping auto-placement`);
+    //             return;
+    //         }
+    //         const isTinted = this.tintedCluster && this.tintedCluster.includes(tile);
+    //         const isGreenTinted = this.hoveredCategory === 'greenery';
+    //         if (isTinted && isGreenTinted) {
+    //             console.log(`🌳 Auto-placing trees on green-tinted tile ${index}`);
+    //             this.scene.gameState.resetAllModes();
+    //             this.scene.gameState.trees = true;
+    //             this.scene.gameState.smallTile = true;
+    //             this.scene.gameState.placeTile = true;
+    //             this.scene.gameState.newTile = 'wood';
+    //             setTimeout(() => {
+    //                 this.scene.gameState.resetAllModes();
+    //                 if (this.tintedCluster && this.tintedCluster.length > 0) {
+    //                     this.tintedCluster.forEach(clusterTile => {
+    //                         if (clusterTile && typeof clusterTile.clearTint === 'function') {
+    //                             clusterTile.clearTint();
+    //                         }
+    //                     });
+    //                 }
+    //                 this.tintedCluster = [];
+    //                 this.hoveredTile = null;
+    //                 this.hoveredCategory = null;
+    //             }, 50);
+    //         }
+    //     }
+    // }
+
     /**
-     * Determine if base tinting should be applied
-     * Returns true only when no tool/mode is active
+     * NEW UNIFIED ARCHITECTURE:
+     * Handle base click (no tools active) - auto-place trees on greenery
+     * DISABLED FOR NOW - causing interference with solar upgrades
      */
-    shouldApplyBaseTint() {
-        const gameState = this.scene.gameState;
+    handleBaseClick(tile, index) {
+        console.log(`🌳 handleBaseClick called - DISABLED to prevent interference`);
+        // TODO: Re-implement tree auto-placement after solar upgrades are working
+        // const isGreenTinted = this.hoveredCategory === 'greenery';
+        // if (!isGreenTinted) return;
+        // if (this.scene.inputManager && this.scene.inputManager.isAKeyHeld) return;
+        // // Place tree logic here
+    }
 
-        // Check if any mode or tool is active
-        const hasActiveMode = gameState.infoBool ||
-                             gameState.moveBool ||
-                             gameState.rotateBool ||
-                             gameState.zoomBool ||
-                             gameState.homeBool ||
-                             gameState.destroy ||
-                             gameState.wind ||
-                             gameState.solar ||
-                             gameState.trees ||
-                             gameState.mediumTile ||
-                             gameState.largeTile;
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Handle solar click
+     * No A key: Upgrade tile at index 0 only
+     * A key held: Upgrade entire cluster
+     */
+    handleSolarClick(tile, index) {
+        if (!this.savedClusterForUpgrade || this.savedClusterForUpgrade.length === 0) {
+            console.log(`⚠️ No saved cluster - ignoring click`);
+            return;
+        }
 
-        console.log(`📊 TileTypesManager.shouldApplyBaseTint: hasActiveMode=${hasActiveMode}, destroy=${gameState.destroy}, wind=${gameState.wind}, solar=${gameState.solar}, trees=${gameState.trees}`);
+        const landUse = this.scene.mapArray[index];
+        const category = this.getTileCategory(landUse);
+        const spiralMode = this.scene.inputManager?.spiralMode;
 
-        return !hasActiveMode;
+        console.log(`☀️ handleSolarClick - category: ${category}, spiral mode: ${spiralMode}, cluster size: ${this.savedClusterForUpgrade.length}`);
+
+        let tilesToUpgrade;
+
+        if (!spiralMode) {
+            // Spiral mode OFF: Upgrade ONLY index 0
+            tilesToUpgrade = [this.savedClusterForUpgrade[0]];
+            console.log(`🎯 Upgrading index 0 only`);
+        } else {
+            // Spiral mode ON: Upgrade ENTIRE cluster
+            tilesToUpgrade = this.savedClusterForUpgrade;
+            console.log(`🌀 Upgrading entire cluster (${tilesToUpgrade.length} tiles)`);
+        }
+
+        // Determine upgrade type
+        const upgradeType = (category === 'greenery') ? 'power:plant (solar)' : '_solar';
+
+        // Apply upgrades in spiral pattern
+        this.applyUpgradeInSpiral(tilesToUpgrade, tile, upgradeType, category);
+    }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Handle trees click - to be implemented
+     */
+    handleTreesClick(tile, index) {
+        console.log(`🌲 handleTreesClick - TODO: implement`);
+        // TODO: Similar to solar click, place wood on greenery
+    }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Handle wind click - to be implemented
+     */
+    handleWindClick(tile, index) {
+        console.log(`💨 handleWindClick - TODO: implement`);
+        // TODO: Similar to solar click, place wind turbines on greenery
+    }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Apply texture upgrades in spiral pattern from center
+     * This is the core method that changes tile textures
+     */
+    applyUpgradeInSpiral(tiles, centerTile, upgradeType, category) {
+        // Sort by distance for spiral effect
+        const spiralOrder = [...tiles].sort((a, b) => {
+            const distA = Math.sqrt(Math.pow(a.x - centerTile.x, 2) + Math.pow(a.y - centerTile.y, 2));
+            const distB = Math.sqrt(Math.pow(b.x - centerTile.x, 2) + Math.pow(b.y - centerTile.y, 2));
+            return distA - distB;
+        });
+
+        const delayPerTile = 15;
+        let upgradeCount = 0;
+
+        spiralOrder.forEach((tile, orderIndex) => {
+            setTimeout(() => {
+                const currentType = tile.texture.key;
+                let newTileType;
+
+                if (category === 'greenery') {
+                    // Greenery → direct tile type (power:plant)
+                    newTileType = upgradeType;
+                } else {
+                    // Residential → concatenate suffix (house + _solar = house_solar)
+                    newTileType = currentType + upgradeType;
+                }
+
+                console.log(`🔧 [${orderIndex + 1}/${spiralOrder.length}] Upgrading: ${currentType} → ${newTileType}`);
+
+                // Check if texture exists
+                if (this.scene.textures.exists(newTileType)) {
+                    console.log(`🔧 BEFORE upgrade - tile.texture.key: ${tile.texture.key}`);
+
+                    // Update texture
+                    tile.setTexture(newTileType, 0);
+
+                    console.log(`🔧 AFTER setTexture - tile.texture.key: ${tile.texture.key}`);
+
+                    // Update mapArray
+                    const tileIndex = this.scene.mapTiles.indexOf(tile);
+                    if (tileIndex !== -1) {
+                        console.log(`🔧 Updating mapArray[${tileIndex}] from "${this.scene.mapArray[tileIndex]}" to "${newTileType}"`);
+                        this.scene.mapArray[tileIndex] = newTileType;
+                        console.log(`🔧 Verified: mapArray[${tileIndex}] = "${this.scene.mapArray[tileIndex]}"`);
+                    }
+
+                    // Clear tint
+                    if (tile.clearTint) {
+                        tile.clearTint();
+                    }
+
+                    // Play animation if exists
+                    if (this.scene.anims.exists(newTileType)) {
+                        tile.play({ key: newTileType, randomFrame: true });
+                    }
+
+                    // Update tile changes for saving
+                    if (tile.id !== undefined) {
+                        const changeIndex = this.scene.tileChanges.findIndex(t => t.id === tile.id);
+                        if (changeIndex !== -1) {
+                            this.scene.tileChanges[changeIndex].newTileType = newTileType;
+                            console.log(`📝 Updated tileChanges[${changeIndex}] to ${newTileType}`);
+                        } else {
+                            this.scene.tileChanges.push({ id: tile.id, newTileType: newTileType });
+                            console.log(`📝 Added new tileChange: id=${tile.id}, newTileType=${newTileType}`);
+                        }
+                    }
+
+                    upgradeCount++;
+                } else {
+                    console.warn(`⚠️ Texture not found: ${newTileType}`);
+                }
+
+                // On last tile: update simulation & save state
+                if (orderIndex === spiralOrder.length - 1) {
+                    console.log(`✅ Upgrade complete! ${upgradeCount}/${spiralOrder.length} tiles upgraded`);
+
+                    if (this.scene.citySim) {
+                        this.scene.citySim.immediateUpdate();
+                    }
+
+                    if (!this.scene.isLoadingMap) {
+                        this.scene.saveState();
+                    }
+
+                    // Clear saved cluster
+                    this.savedClusterForUpgrade = [];
+                    this.currentUpgradeMode = null;
+                }
+            }, orderIndex * delayPerTile);
+        });
+    }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Clear all tints and reset state
+     */
+    clearAllTints() {
+        if (this.tintedCluster && this.tintedCluster.length > 0) {
+            this.tintedCluster.forEach(clusterTile => {
+                if (clusterTile && typeof clusterTile.clearTint === 'function') {
+                    clusterTile.clearTint();
+                }
+            });
+        }
+        this.tintedCluster = [];
+        this.hoveredTile = null;
+        this.hoveredCategory = null;
+
+        // Restore all tiles to full opacity (in case we were in info mode)
+        this.scene.mapTiles.forEach(mapTex => {
+            if (mapTex) mapTex.setAlpha(1.0);
+        });
+
+        // Clear info text if visible
+        if (this.scene.infoTextElement) {
+            this.scene.infoTextElement.textContent = '';
+            this.scene.infoTextElement.classList.remove('show');
+        }
+    }
+
+    // OLD ARCHITECTURE - COMMENTED OUT:
+    // /**
+    //  * Determine if base tinting should be applied
+    //  * Returns true only when no tool/mode is active
+    //  */
+    // shouldApplyBaseTint() {
+    //     const gameState = this.scene.gameState;
+    //     const hasActiveMode = gameState.infoBool ||
+    //                          gameState.moveBool ||
+    //                          gameState.rotateBool ||
+    //                          gameState.zoomBool ||
+    //                          gameState.homeBool ||
+    //                          gameState.destroy ||
+    //                          gameState.wind ||
+    //                          gameState.solar ||
+    //                          gameState.trees ||
+    //                          gameState.mediumTile ||
+    //                          gameState.largeTile;
+    //     return !hasActiveMode;
+    // }
+
+    /**
+     * NEW UNIFIED ARCHITECTURE:
+     * Determine the current tinting mode based on gameState
+     * Returns: 'base', 'solar', 'trees', 'wind', 'destroy', 'road', 'bike', or 'none'
+     */
+    getTintingMode() {
+        const gs = this.scene.gameState;
+
+        // Debug: Show current state
+        console.log(`🔍 getTintingMode - upgrade: ${gs.upgrade}, solar: ${gs.solar}, trees: ${gs.trees}, destroy: ${gs.destroy}`);
+
+        // Check for active tool states (in priority order)
+        // SIMPLIFIED: Only check upgrade property, not both upgrade and solar
+        if (gs.upgrade === 'solar') {
+            console.log(`✅ Returning 'solar' mode`);
+            return 'solar';
+        }
+        if (gs.trees) return 'trees';
+        if (gs.wind) return 'wind';
+        if (gs.destroy) return 'destroy';
+        if (gs.road) return 'road';
+        if (gs.bike) return 'bike';
+
+        // Check for info mode (display tile info)
+        if (gs.infoBool) {
+            return 'info';
+        }
+
+        // Check for navigation modes (no tinting)
+        if (gs.moveBool || gs.rotateBool || gs.zoomBool || gs.homeBool) {
+            return 'none';
+        }
+
+        // Default: base category tinting
+        console.log(`⚠️ No active mode - returning 'base'`);
+        return 'base';
     }
 
     /**
@@ -454,5 +884,9 @@ export default class TileTypesManager {
         this.hoveredCategory = null;
         this.tintedCluster = [];
         this.registeredTiles.clear();
+
+        // NEW UNIFIED ARCHITECTURE: Clean up new properties
+        this.savedClusterForUpgrade = [];
+        this.currentUpgradeMode = null;
     }
 }

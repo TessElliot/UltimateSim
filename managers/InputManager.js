@@ -6,8 +6,8 @@ export class InputManager {
         this.scene = scene;
         this.emitter = null;
 
-        // Track if 'A' key is held for cluster preview
-        this.isAKeyHeld = false;
+        // Track spiral mode state (toggled by pressing A)
+        this.spiralMode = false;
 
         // Store bound methods for proper cleanup
         this.boundHandlers = {
@@ -124,8 +124,16 @@ export class InputManager {
         });
 
         // SPACE = Info mode (hold to activate, release to deactivate)
-        keyboard.on('keydown-SPACE', () => this.handleInfoMap());
-        keyboard.on('keyup-SPACE', () => this.handleInfoMapRelease());
+        keyboard.on('keydown-SPACE', () => {
+            this.handleInfoMap();
+            // Re-trigger hover effect if currently hovering over a tile
+            this.retriggerHoverEffect();
+        });
+        keyboard.on('keyup-SPACE', () => {
+            this.handleInfoMapRelease();
+            // Re-trigger hover effect if currently hovering over a tile
+            this.retriggerHoverEffect();
+        });
 
         // + (PLUS) = Zoom in
         keyboard.on('keydown-PLUS', () => this.handleZoomIn());
@@ -141,17 +149,27 @@ export class InputManager {
         // F = Go Home (center)
         keyboard.on('keydown-F', () => this.handleGoHome());
 
-        // A key = Hold to preview cluster, then click to upgrade cluster
+        // A key = Hold down to enable spiral mode
         keyboard.on('keydown-A', () => {
-            // Set flag that A is being held
-            this.isAKeyHeld = true;
-            console.log('🔑 A key pressed - cluster preview mode active');
+            // Prevent keyboard repeat from re-triggering
+            if (this.spiralMode) {
+                console.log(`🔑 A key DOWN - already in spiral mode, ignoring repeat`);
+                return;
+            }
+
+            this.spiralMode = true;
+            console.log(`🔑 A key DOWN - spiral mode ENABLED`);
+
+            // Re-trigger hover effect if currently hovering over a tile
+            this.retriggerHoverEffect();
         });
 
         keyboard.on('keyup-A', () => {
-            // Clear flag when A is released
-            this.isAKeyHeld = false;
-            console.log('🔑 A key released - cluster preview mode inactive');
+            this.spiralMode = false;
+            console.log(`🔑 A key UP - spiral mode DISABLED`);
+
+            // Re-trigger hover effect if currently hovering over a tile
+            this.retriggerHoverEffect();
         });
 
         // D = Bulldoze/Destroy
@@ -706,6 +724,53 @@ export class InputManager {
                 }
             }, orderIndex * delayPerTile);
         });
+    }
+
+    /**
+     * Re-trigger hover effect for the currently hovered tile
+     * Called when A key or spacebar state changes while hovering
+     */
+    retriggerHoverEffect() {
+        // Get the currently hovered tile from TileTypesManager
+        if (this.scene.tileTypesManager && this.scene.tileTypesManager.hoveredTile) {
+            const hoveredTile = this.scene.tileTypesManager.hoveredTile;
+            const hoveredIndex = this.scene.mapTiles.indexOf(hoveredTile);
+
+            if (hoveredIndex !== -1) {
+                console.log(`🔄 Re-triggering hover effect for tile ${hoveredIndex}, spiralMode: ${this.spiralMode}`);
+
+                // Store reference before clearing
+                const tileRef = hoveredTile;
+                const indexRef = hoveredIndex;
+
+                console.log(`   🧹 Clearing ${this.scene.tileTypesManager.activeTimeouts.length} active timeouts`);
+                console.log(`   🧹 isAnimating BEFORE: ${this.scene.tileTypesManager.isAnimating}`);
+
+                // Clear existing tints and animation state
+                this.scene.tileTypesManager.clearAnimationTimeouts();
+                this.scene.tileTypesManager.isAnimating = false;
+
+                console.log(`   🧹 isAnimating AFTER: ${this.scene.tileTypesManager.isAnimating}`);
+
+                // Clear tints without resetting hoveredTile
+                if (this.scene.tileTypesManager.tintedCluster && this.scene.tileTypesManager.tintedCluster.length > 0) {
+                    console.log(`   🧹 Clearing tints from ${this.scene.tileTypesManager.tintedCluster.length} tiles`);
+                    this.scene.tileTypesManager.tintedCluster.forEach(clusterTile => {
+                        if (clusterTile && typeof clusterTile.clearTint === 'function') {
+                            clusterTile.clearTint();
+                        }
+                    });
+                }
+                this.scene.tileTypesManager.tintedCluster = [];
+
+                // Get the current pointer position
+                const pointer = this.scene.input.activePointer;
+
+                console.log(`   ✨ Re-triggering handleBaseTileHover`);
+                // Re-trigger the hover handler
+                this.scene.tileTypesManager.handleBaseTileHover(tileRef, indexRef, pointer);
+            }
+        }
     }
 
     /**

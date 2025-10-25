@@ -307,6 +307,10 @@
     frameWidth: 32,
     frameHeight: 64,
   });
+  scene.load.spritesheet("apartments_solar", "assets/landuse/apartments_solar.png", {
+    frameWidth: 32,
+    frameHeight: 128,
+  });
   scene.load.spritesheet("scrub", "assets/landuse/scrub.png", {
     frameWidth: 32,
     frameHeight: 64,
@@ -545,8 +549,20 @@ export function createAnimations(scene) {
       frameRate: 4,
     },
     {
+      key: "house_solar",
+      sprite: "house_solar",
+      frames: [0, 1, 2, 3, 4, 5, 6, 7],
+      frameRate: 4,
+    },
+    {
       key: "detached",
       sprite: "house",
+      frames: [0, 1, 2, 3, 4, 5, 6, 7],
+      frameRate: 4,
+    },
+    {
+      key: "detached_solar",
+      sprite: "detached_solar",
       frames: [0, 1, 2, 3, 4, 5, 6, 7],
       frameRate: 4,
     },
@@ -605,14 +621,32 @@ export function createAnimations(scene) {
       frameRate: 3,
     },
     {
+      key: "neighbourhood_solar",
+      sprite: "neighbourhood_solar",
+      frames: Array.from({ length: 20 }, (_, i) => i),
+      frameRate: 3,
+    },
+    {
       key: "neighborhood",
       sprite: "neighborhood",
       frames: Array.from({ length: 20 }, (_, i) => i),
       frameRate: 3,
     },
     {
+      key: "neighborhood_solar",
+      sprite: "neighborhood_solar",
+      frames: Array.from({ length: 20 }, (_, i) => i),
+      frameRate: 3,
+    },
+    {
       key: "residential",
       sprite: "residential",
+      frames: Array.from({ length: 40 }, (_, i) => i),
+      frameRate: 3,
+    },
+    {
+      key: "residential_solar",
+      sprite: "residential_solar",
       frames: Array.from({ length: 40 }, (_, i) => i),
       frameRate: 3,
     },
