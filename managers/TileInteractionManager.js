@@ -31,11 +31,12 @@ export class TileInteractionManager {
             this.scene.tileTypesManager.registerTile(tile, tileIndex);
         }
 
-        // Add TileInteractionManager listeners
-        // Note: TileTypesManager already added its listeners, so these stack on top
-        tile.on('pointerover', (pointer) => this.handlePointerOver(tile, pointer));
-        tile.on('pointerdown', (pointer) => this.handlePointerDown(tile, pointer));
-        tile.on('pointerout', (pointer) => this.handlePointerOut(tile, pointer));
+        // UNIFIED ARCHITECTURE:
+        // TileTypesManager now handles ALL pointer interactions (hover, click, out)
+        // The handlers below are commented out to prevent duplicate event handling
+        // tile.on('pointerover', (pointer) => this.handlePointerOver(tile, pointer));
+        // tile.on('pointerdown', (pointer) => this.handlePointerDown(tile, pointer));
+        // tile.on('pointerout', (pointer) => this.handlePointerOut(tile, pointer));
     }
 
     /**

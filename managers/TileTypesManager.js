@@ -694,6 +694,12 @@ export default class TileTypesManager {
                         }
                     }
 
+                    // Emit climate event for EACH tile upgrade
+                    this.scene.emitter.emit('TILE_PLACED', {
+                        oldTileType: currentType,
+                        newTileType: newTileType
+                    });
+
                     upgradeCount++;
                 } else {
                     console.warn(`⚠️ Texture not found: ${newTileType}`);
