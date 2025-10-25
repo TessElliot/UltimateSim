@@ -65,6 +65,16 @@ export default class TileManager {
     }
 
     /**
+     * Remove a tile from all category arrays
+     */
+    removeTileFromCategories(index) {
+        this.commercialTiles = this.commercialTiles.filter(t => t.index !== index);
+        this.industrialTiles = this.industrialTiles.filter(t => t.index !== index);
+        this.residentialTiles = this.residentialTiles.filter(t => t.index !== index);
+        this.greeneryTiles = this.greeneryTiles.filter(t => t.index !== index);
+    }
+
+    /**
      * Register a single tile as it streams in
      * This is called for each tile during the streaming process
      */
@@ -74,6 +84,9 @@ export default class TileManager {
         // Get land use for this tile
         const landUse = this.scene.mapArray[index];
         if (!landUse) return;
+
+        // Remove from old categories first (in case tile type changed)
+        this.removeTileFromCategories(index);
 
         // Categorize the tile
         if (this.categoryDefinitions.commercial.includes(landUse)) {
@@ -85,6 +98,7 @@ export default class TileManager {
         } else if (this.categoryDefinitions.greenery.includes(landUse)) {
             this.greeneryTiles.push({ tile, index, landUse });
         }
+        // Note: ground/null tiles are not categorized, which is correct
 
         // Only set up interaction if this tile hasn't been registered yet
         if (!this.registeredTiles.has(index)) {
@@ -778,6 +792,10 @@ export default class TileManager {
 
         // Update mapArray
         this.scene.mapArray[index] = 'ground';
+
+        // Re-register tile with TileManager so it knows it's now ground
+        // This is important so wind mode can find it
+        this.registerTile(tile, index);
 
         // Update tileChanges for saving
         if (tile.id !== undefined) {
