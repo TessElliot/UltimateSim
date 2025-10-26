@@ -178,7 +178,7 @@ export default class TileManager {
                 this.applyDestroyTint(tile, index);
                 break;
             case 'info':
-                this.displayTileInfo(tile, index);
+                this.displayTileInfo(tile, index, pointer);
                 break;
             case 'none':
                 // Do nothing (navigation mode)
