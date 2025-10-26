@@ -6,6 +6,8 @@
  * - Tinting (base mode, solar mode, trees mode, wind mode, info mode)
  * - Cluster finding and upgrades
  */
+import { findClimateNumber } from '../helpers/tileUtils.js';
+
 export default class TileManager {
     constructor(scene) {
         this.scene = scene;
@@ -296,11 +298,14 @@ export default class TileManager {
     applyDestroyTint(tile, index) {
         console.log(`🔨 applyDestroyTint - tile ${index}`);
 
-        // Full white tint (0xffffff) with full fill to completely whiten the tile
-        tile.setTint(0xffffff);
-        tile.setTintFill(0xffffff); // This makes it solid white, not just tinted
+        // No tint - just apply shader effect
         this.tintedCluster = [tile];
         this.savedClusterForUpgrade = [];
+
+        // Pause animation to freeze the current frame while shader is active
+        if (tile.anims) {
+            tile.anims.pause();
+        }
 
         // Apply shader-based rumble distortion effect
         try {
@@ -309,6 +314,25 @@ export default class TileManager {
             if (pipeline) {
                 pipeline.intensity = 0.02;  // Subtle pixel distortion (reduced by 80%)
                 pipeline.frequency = 35;    // Medium wave density for organic feel
+
+                // Calculate frameWidth in UV space (0-1 range)
+                // If texture is 128px wide and frame is 32px, frameWidth = 32/128 = 0.25
+                if (tile.texture && tile.texture.source) {
+                    const textureWidth = tile.texture.source[0].width;
+                    const frameWidthPixels = 32.0;
+                    pipeline.frameWidth = frameWidthPixels / textureWidth;
+
+                    // Get current frame position for shader (since animation is paused)
+                    if (tile.frame) {
+                        pipeline.frameStart = tile.frame.cutX / textureWidth;
+                        pipeline.frameEnd = (tile.frame.cutX + tile.frame.cutWidth) / textureWidth;
+                        console.log(`📐 Texture: ${textureWidth}px, frameWidth UV: ${pipeline.frameWidth}, frame range: ${pipeline.frameStart.toFixed(3)} - ${pipeline.frameEnd.toFixed(3)}`);
+                    }
+                } else {
+                    pipeline.frameWidth = 0.25; // fallback assumption: 32px / 128px
+                    pipeline.frameStart = 0.0;
+                    pipeline.frameEnd = 1.0;
+                }
             }
             this.rumbledTiles.push(tile);
             console.log(`💥 Applied shader distortion to tile ${index}`);
@@ -319,11 +343,46 @@ export default class TileManager {
 
     /**
      * NEW UNIFIED ARCHITECTURE:
-     * Apply trees tinting - to be implemented
+     * Apply trees tinting - only works on greenery tiles
+     * No spiral mode: Tint only hovered tile
+     * A key held: Spiral tint entire cluster
      */
     applyTreesTint(tile, index) {
-        console.log(`🌲 applyTreesTint - TODO: implement`);
-        // TODO: Similar to solar, but only works on greenery
+        const landUse = this.scene.mapArray[index];
+        const category = this.getTileCategory(landUse);
+        const spiralMode = this.scene.inputManager?.spiralMode;
+
+        console.log(`🌲 applyTreesTint - category: ${category}, spiral mode: ${spiralMode}`);
+
+        // Trees ONLY work on greenery
+        if (category !== 'greenery') {
+            console.log(`❌ Trees don't work on ${category} - showing red tint`);
+            tile.setTint(0xff0000);
+            this.tintedCluster = [tile];
+            this.savedClusterForUpgrade = [];
+            return;
+        }
+
+        // Find cluster of greenery tiles (grass + park + forest)
+        const cluster = this.findConnectedTilesOfCategory(tile, category);
+
+        console.log(`✨ Found greenery cluster of ${cluster.length} tiles`);
+
+        // ALWAYS save cluster for click handler (even if not showing spiral)
+        this.savedClusterForUpgrade = cluster;
+        this.currentUpgradeMode = 'trees';
+
+        if (!spiralMode) {
+            // Spiral mode OFF: Tint ONLY the hovered tile
+            console.log(`🎯 Spiral mode OFF - tinting single tile ${index}`);
+            tile.setTint(0x00ff00);
+            this.tintedCluster = [tile];
+        } else {
+            // Spiral mode ON: Tint entire cluster in spiral
+            console.log(`🌀 Spiral mode ON - spiral tinting ${cluster.length} tiles`);
+            this.tintedCluster = cluster;
+            this.applyTintInSpiral(cluster, tile, 0x00ff00);
+        }
     }
 
     /**
@@ -388,7 +447,11 @@ export default class TileManager {
         }
 
         if (this.scene.infoTextElement) {
-            const infoText = `Tile ${index} | Texture: "${textureKey}" | Land Use: "${landUse}" | Category: "${category || 'none'}"`;
+            // Get climate score for this tile
+            const climateScore = findClimateNumber(textureKey);
+            const climateText = climateScore > 0 ? `+${climateScore}` : `${climateScore}`;
+
+            const infoText = `Land Use: "${landUse}" | Climate: ${climateText} | Type: "${category || 'none'}"`;
             this.scene.infoTextElement.textContent = infoText;
             this.scene.infoTextElement.classList.add('show');
 
@@ -601,6 +664,10 @@ export default class TileManager {
                 this.rumbledTiles.forEach(rumbledTile => {
                     try {
                         rumbledTile.resetPipeline();
+                        // Resume animation that was paused during destroy mode
+                        if (rumbledTile.anims) {
+                            rumbledTile.anims.resume();
+                        }
                     } catch (error) {
                         console.error('⚠️ Failed to reset pipeline:', error);
                     }
@@ -749,11 +816,40 @@ export default class TileManager {
 
     /**
      * NEW UNIFIED ARCHITECTURE:
-     * Handle trees click - to be implemented
+     * Handle trees click - place wood tiles on greenery
      */
     handleTreesClick(tile, index) {
-        console.log(`🌲 handleTreesClick - TODO: implement`);
-        // TODO: Similar to solar click, place wood on greenery
+        if (!this.savedClusterForUpgrade || this.savedClusterForUpgrade.length === 0) {
+            console.log(`⚠️ No saved cluster - ignoring click`);
+            return;
+        }
+
+        const landUse = this.scene.mapArray[index];
+        const category = this.getTileCategory(landUse);
+        const spiralMode = this.scene.inputManager?.spiralMode;
+
+        console.log(`🌲 handleTreesClick - category: ${category}, spiral mode: ${spiralMode}, cluster size: ${this.savedClusterForUpgrade.length}`);
+
+        // Trees can only be placed on greenery
+        if (category !== 'greenery') {
+            console.log(`❌ Trees can only be placed on greenery, not "${category}"`);
+            return;
+        }
+
+        let tilesToUpgrade;
+
+        if (!spiralMode) {
+            // Spiral mode OFF: Upgrade ONLY index 0
+            tilesToUpgrade = [this.savedClusterForUpgrade[0]];
+            console.log(`🎯 Upgrading index 0 only`);
+        } else {
+            // Spiral mode ON: Upgrade ENTIRE cluster
+            tilesToUpgrade = this.savedClusterForUpgrade;
+            console.log(`🌀 Upgrading entire cluster (${tilesToUpgrade.length} tiles)`);
+        }
+
+        // Place wood tiles on the cluster
+        this.applyUpgradeInSpiral(tilesToUpgrade, tile, 'wood', category);
     }
 
     /**

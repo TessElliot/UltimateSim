@@ -129,7 +129,7 @@ canvas {
 
 #climate_number {
     font-family: Courier New, Courier, monospace;
-    color: orangered;
+    color: #000000;
     text-align: left;
     padding: 20px;
     box-sizing: border-box;

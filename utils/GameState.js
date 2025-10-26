@@ -143,12 +143,12 @@ export class GameState {
             bike: 'Build Bike Lane'
         };
 
-        if (this.mediumTile && !this.largeTile) {
-            return 'Build Green Apartments +3';
-        }
-        if (this.largeTile) {
-            return 'Build Hydrogen Power +10';
-        }
+        // if (this.mediumTile && !this.largeTile) {
+        //     return 'Build Green Apartments +3';
+        // }
+        // if (this.largeTile) {
+        //     return 'Build Hydrogen Power +10';
+        // }
 
         return infoTexts[mode] || '';
     }

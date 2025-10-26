@@ -127,7 +127,8 @@ export class GameScene extends Phaser.Scene {
         console.log('🎮 Data type:', typeof data);
         console.log('🎮 Data.resume?:', data && data.resume);
 
-        this.emitter = EventDispatcher.getInstance();
+        // Initialize internal event emitter (for TILE_PLACED, TILE_REMOVED, etc.)
+        this.emitter = new Phaser.Events.EventEmitter();
 
         // Initialize HTML controls (connects HTML/CSS buttons to event system)
         this.htmlControls = new HTMLControls(this.emitter);
@@ -230,18 +231,6 @@ export class GameScene extends Phaser.Scene {
 
         this.mapContainer = this.add.container(0, 0);
         this.mapContainer.sort("y");
-
-        ///UISCENE - CREATE BEFORE LOADING MAP, HIDDEN UNTIL FIRST TILE APPEARS
-        this.UIScene = new UIScene({ scene: this });
-        this.UIScene.camUI.setVisible(false); // Keep hidden - using HTML/CSS buttons instead
-        this.UIScene.camUI.ignore([
-            this.bkgd,
-            this.bkgdProcessing,
-            this.BackgroundColor
-        ]);
-
-        // Setup camera ignores immediately so UI is visible during streaming
-        camGame.ignore(this.UIScene.buttons);
 
         // Initialize input manager so UI buttons are interactive during streaming
         this.inputManager.initialize(this.emitter);
@@ -856,7 +845,7 @@ export class GameScene extends Phaser.Scene {
         // 🏁 Final processing pass after ALL tiles loaded
         // Mark loading as complete
         this.gameState.isLoading = false;
-        isLoading = false;
+        this.isLoadingMap = false;
 
         console.log('🎮 renderGridInSpiral complete - about to show navigation');
         // Show navigation now that game scene is loaded
@@ -2273,16 +2262,6 @@ triggerFloodRipple(
     }
 }
 
-destroyTile(x, y) {
-    const tile = this.mapTiles.find((t) => t.gridX === x && t.gridY === y);
-    if (tile && tile.texture.key !== "destroy") {
-        tile.setTexture("destroy");
-        tile.play("bulldozing");
-        // Don't save state for destroy actions - only for tile placement
-        // this.saveState();
-    }
-}
-
 printClusters(clusters) {
     clusters.forEach((cluster, clusterIndex) => {
         console.log(`Cluster ${clusterIndex + 1}:`);
@@ -2323,20 +2302,10 @@ countArtificialTiles(results, mapTilesWidth, mapTilesHeight) {
 
 isPointerOverUI(pointer) {
     if (!this.uiBounds) return false;
-    
-    // 🔑 Exclude dropdown area from UI bounds check
-    if (this.UIScene && this.UIScene.testDropdown) {
-        const dd = this.UIScene.testDropdown;
-        const ddBounds = dd.getBounds();
-        if (ddBounds.contains(pointer.x, pointer.y)) {
-            console.log("👉 Clicking on dropdown, allowing through");
-            return false;  // Allow dropdown clicks
-        }
-    }
-    
-    return pointer.x >= this.uiBounds.x && 
-           pointer.x <= this.uiBounds.x + this.uiBounds.width && 
-           pointer.y >= this.uiBounds.y && 
+
+    return pointer.x >= this.uiBounds.x &&
+           pointer.x <= this.uiBounds.x + this.uiBounds.width &&
+           pointer.y >= this.uiBounds.y &&
            pointer.y <= this.uiBounds.y + this.uiBounds.height;
 }
 
@@ -2457,16 +2426,26 @@ redoState() {
  */
 saveGameToLocalStorage() {
     try {
-        const savedMap = JSON.parse(localStorage.getItem("savedMap")) || {};
+        // Build complete save data from current game state
+        const simplifiedTileData = this.mapTiles.map(tile => ({
+            x: tile.gridX,
+            y: tile.gridY,
+            id: tile.id,
+            tileType: tile.texture.key,
+        }));
 
-        // Update tileChanges and landUseInfo
-        savedMap.tileChanges = this.tileChanges;
-        savedMap.landUseInfo = Object.fromEntries(landUseInfo.entries());
+        const mapDataForStorage = {
+            tiles: simplifiedTileData,
+            gridWidth: this.gridWidth,      // ✅ Save current grid dimensions
+            gridHeight: this.gridHeight,    // ✅ Save current grid dimensions
+            tileChanges: this.tileChanges,
+            landUseInfo: Object.fromEntries(landUseInfo.entries()),
+        };
 
         // Save to localStorage
-        localStorage.setItem("savedMap", JSON.stringify(savedMap));
+        localStorage.setItem("savedMap", JSON.stringify(mapDataForStorage));
 
-        console.log(`💾 Game saved! (${this.tileChanges.length} tile changes)`);
+        console.log(`💾 Game saved! Grid: ${this.gridWidth}x${this.gridHeight}, Changes: ${this.tileChanges.length}`);
 
         // Visual feedback: flash the Save menu item briefly
         const saveButton = document.querySelector('[data-action="save"]');
@@ -2485,8 +2464,13 @@ saveGameToLocalStorage() {
 update() {
     if (this.isFlooding || this.isReverting) return;
 
+    // Sync mapArray from tile textures, but skip 'destroy' (it's just an animation)
     for (let i = 0; i < this.mapTiles.length; i++) {
-        this.mapArray[i] = this.mapTiles[i].texture.key;
+        // Don't sync 'destroy' texture to mapArray - it's a temporary visual state
+        // The actual land use should remain what was set (e.g., 'ground' after bulldozing)
+        if (this.mapTiles[i].texture.key !== 'destroy') {
+            this.mapArray[i] = this.mapTiles[i].texture.key;
+        }
     }
 
     // Handle arrow key input for camera panning
