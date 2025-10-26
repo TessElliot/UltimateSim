@@ -307,8 +307,24 @@ export default class TileManager {
             tile.setPipeline('RumbleDistortion');
             const pipeline = tile.pipeline;
             if (pipeline) {
-                pipeline.intensity = 0.02;  // Subtle pixel distortion (reduced by 80%)
-                pipeline.frequency = 35;    // Medium wave density for organic feel
+                pipeline.pixelScale = 4.0;      // Scale for pixel calculations
+                pipeline.tileRepeat = 32.0;     // 32px repeating segments
+                pipeline.intensity = 0.003;     // Subtle distortion effect
+                pipeline.frequency = 1.0;       // Wave frequency
+
+                // Track animation frames for proper UV mapping in texture atlas
+                tile.on('animationupdate', (_anim, frame) => {
+                    const tex = tile.texture;
+                    pipeline.frameStart = frame.cutX / tex.width;
+                    pipeline.frameEnd = (frame.cutX + frame.cutWidth) / tex.width;
+                });
+
+                // Set initial frame bounds if tile has a current frame
+                if (tile.frame && tile.texture) {
+                    const tex = tile.texture;
+                    pipeline.frameStart = tile.frame.cutX / tex.width;
+                    pipeline.frameEnd = (tile.frame.cutX + tile.frame.cutWidth) / tex.width;
+                }
             }
             this.rumbledTiles.push(tile);
             console.log(`💥 Applied shader distortion to tile ${index}`);
