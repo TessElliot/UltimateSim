@@ -33,6 +33,8 @@ export class ClimateManager {
 
         // Show the climate score display in top-left, start with processing animation
         if (this.climateScoreElement) {
+            // Set color inline like Phaser text (same as navigation orange)
+            this.climateScoreElement.style.color = '#ff6633';
             this.climateScoreElement.classList.add('show');
             // Start with processing animation (score is 0 at start)
             this.startProcessingAnimation();

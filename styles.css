@@ -176,7 +176,7 @@ canvas {
     font-family: 'Press Start 2P', cursive;
     font-size: 1.3vw;
     font-weight: bold;
-    color: #ff6633;
+    /* color set inline via ClimateManager.js to match Phaser text style */
     text-shadow:
         -1px -1px 0 #000,
         1px -1px 0 #000,
