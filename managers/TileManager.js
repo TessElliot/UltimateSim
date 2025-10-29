@@ -88,24 +88,27 @@ export default class TileManager {
 
         // Get land use for this tile
         const landUse = this.scene.mapArray[index];
-        if (!landUse) return;
 
-        // Remove from old categories first (in case tile type changed)
-        this.removeTileFromCategories(index);
+        // Categorization is optional - only if landUse exists
+        if (landUse) {
+            // Remove from old categories first (in case tile type changed)
+            this.removeTileFromCategories(index);
 
-        // Categorize the tile
-        if (this.categoryDefinitions.commercial.includes(landUse)) {
-            this.commercialTiles.push({ tile, index, landUse });
-        } else if (this.categoryDefinitions.industrial.includes(landUse)) {
-            this.industrialTiles.push({ tile, index, landUse });
-        } else if (this.categoryDefinitions.residential.includes(landUse)) {
-            this.residentialTiles.push({ tile, index, landUse });
-        } else if (this.categoryDefinitions.greenery.includes(landUse)) {
-            this.greeneryTiles.push({ tile, index, landUse });
+            // Categorize the tile
+            if (this.categoryDefinitions.commercial.includes(landUse)) {
+                this.commercialTiles.push({ tile, index, landUse });
+            } else if (this.categoryDefinitions.industrial.includes(landUse)) {
+                this.industrialTiles.push({ tile, index, landUse });
+            } else if (this.categoryDefinitions.residential.includes(landUse)) {
+                this.residentialTiles.push({ tile, index, landUse });
+            } else if (this.categoryDefinitions.greenery.includes(landUse)) {
+                this.greeneryTiles.push({ tile, index, landUse });
+            }
+            // Note: ground/null tiles are not categorized, which is correct
         }
-        // Note: ground/null tiles are not categorized, which is correct
 
-        // Only set up interaction if this tile hasn't been registered yet
+        // ALWAYS set up interaction handlers (even for null landUse)
+        // This allows tiles to respond to hover/click before full data loads
         if (!this.registeredTiles.has(index)) {
             this.setupTileInteraction(tile, index);
             this.registeredTiles.add(index);
@@ -120,29 +123,26 @@ export default class TileManager {
     setupTileInteraction(tile, index) {
         if (!tile) return;
 
-        console.log(`🎯 TileTypesManager: Setting up listeners for tile ${index} (${tile.texture.key})`);
+        //console.log(`🎯 TileTypesManager: Setting up listeners for tile ${index} (${tile.texture.key})`);
 
         // Tiles are already interactive from GameScene setup
         // We just add our category-based hover handlers
 
         // Add base hover handler (runs before other handlers)
         tile.on('pointerover', (pointer) => {
-            console.log(`🔵 TileTypesManager: pointerover fired for tile ${index}`);
             this.handleBaseTileHover(tile, index, pointer);
         });
 
         tile.on('pointerout', (pointer) => {
-            console.log(`🔴 TileTypesManager: pointerout fired for tile ${index}`);
             this.handleBaseTileOut(tile, index, pointer);
         });
 
         // Add default click handler for greenery tiles
         tile.on('pointerdown', (pointer) => {
-            console.log(`⚫ TileTypesManager: pointerdown fired for tile ${index}`);
             this.handleBaseTileClick(tile, index, pointer);
         });
 
-        console.log(`✅ TileTypesManager: Listeners registered for tile ${index}`);
+        //console.log(`✅ TileTypesManager: Listeners registered for tile ${index}`);
     }
 
     /**
@@ -151,10 +151,8 @@ export default class TileManager {
      * This is the SINGLE ENTRY POINT for all hover interactions
      */
     handleBaseTileHover(tile, index, pointer) {
-        console.log(`🌟 TileTypesManager.handleBaseTileHover called for tile ${index}`);
 
         const mode = this.getTintingMode();
-        console.log(`🎮 Current mode: ${mode}`);
 
         // Skip if already animating to prevent performance issues
         if (this.isAnimating) {
@@ -231,16 +229,13 @@ export default class TileManager {
 
             if (!spiralMode) {
                 // Spiral mode OFF: Tint ONLY the hovered tile
-                console.log(`🎯 Spiral mode OFF - tinting single tile ${index} (${landUse})`);
                 tile.setTint(tintColor);
                 this.tintedCluster = [tile];
             } else {
                 // Spiral mode ON: Tint entire cluster in spiral
-                console.log(`🌀 Spiral mode ON - tinting cluster for tile ${index} (${landUse})`);
                 const connectedTiles = this.findConnectedTilesOfCategory(tile, category);
                 this.tintedCluster = connectedTiles;
                 this.applyTintInSpiral(connectedTiles, tile, tintColor);
-                console.log(`✨ ${category} cluster tint applied to ${connectedTiles.length} connected tiles`);
             }
         }
     }
@@ -261,7 +256,6 @@ export default class TileManager {
 
         // Solar works on: residential OR greenery
         if (category !== 'residential' && category !== 'greenery') {
-            console.log(`❌ Solar doesn't work on ${category} - showing red tint`);
             tile.setTint(0xff0000);
             this.tintedCluster = [tile];
             this.savedClusterForUpgrade = [];
@@ -280,12 +274,10 @@ export default class TileManager {
 
         if (!spiralMode) {
             // Spiral mode OFF: Tint ONLY the hovered tile
-            console.log(`🎯 Spiral mode OFF - tinting single tile ${index}`);
             tile.setTint(0x00ff00);
             this.tintedCluster = [tile];
         } else {
             // Spiral mode ON: Tint entire cluster in spiral
-            console.log(`🌀 Spiral mode ON - spiral tinting ${cluster.length} tiles`);
             this.tintedCluster = cluster;
             this.applyTintInSpiral(cluster, tile, 0x00ff00);
         }
@@ -296,7 +288,6 @@ export default class TileManager {
      * Apply destroy/bulldoze tinting - white overlay with shader distortion effect
      */
     applyDestroyTint(tile, index) {
-        console.log(`🔨 applyDestroyTint - tile ${index}`);
 
         // No tint - just apply shader effect
         this.tintedCluster = [tile];
@@ -326,7 +317,7 @@ export default class TileManager {
                     if (tile.frame) {
                         pipeline.frameStart = tile.frame.cutX / textureWidth;
                         pipeline.frameEnd = (tile.frame.cutX + tile.frame.cutWidth) / textureWidth;
-                        console.log(`📐 Texture: ${textureWidth}px, frameWidth UV: ${pipeline.frameWidth}, frame range: ${pipeline.frameStart.toFixed(3)} - ${pipeline.frameEnd.toFixed(3)}`);
+                        //console.log(`📐 Texture: ${textureWidth}px, frameWidth UV: ${pipeline.frameWidth}, frame range: ${pipeline.frameStart.toFixed(3)} - ${pipeline.frameEnd.toFixed(3)}`);
                     }
                 } else {
                     pipeline.frameWidth = 0.25; // fallback assumption: 32px / 128px
@@ -335,7 +326,6 @@ export default class TileManager {
                 }
             }
             this.rumbledTiles.push(tile);
-            console.log(`💥 Applied shader distortion to tile ${index}`);
         } catch (error) {
             console.error(`⚠️ Failed to apply shader pipeline to tile ${index}:`, error);
         }
@@ -352,11 +342,9 @@ export default class TileManager {
         const category = this.getTileCategory(landUse);
         const spiralMode = this.scene.inputManager?.spiralMode;
 
-        console.log(`🌲 applyTreesTint - category: ${category}, spiral mode: ${spiralMode}`);
 
         // Trees ONLY work on greenery
         if (category !== 'greenery') {
-            console.log(`❌ Trees don't work on ${category} - showing red tint`);
             tile.setTint(0xff0000);
             this.tintedCluster = [tile];
             this.savedClusterForUpgrade = [];
@@ -366,20 +354,16 @@ export default class TileManager {
         // Find cluster of greenery tiles (grass + park + forest)
         const cluster = this.findConnectedTilesOfCategory(tile, category);
 
-        console.log(`✨ Found greenery cluster of ${cluster.length} tiles`);
-
         // ALWAYS save cluster for click handler (even if not showing spiral)
         this.savedClusterForUpgrade = cluster;
         this.currentUpgradeMode = 'trees';
 
         if (!spiralMode) {
             // Spiral mode OFF: Tint ONLY the hovered tile
-            console.log(`🎯 Spiral mode OFF - tinting single tile ${index}`);
             tile.setTint(0x00ff00);
             this.tintedCluster = [tile];
         } else {
             // Spiral mode ON: Tint entire cluster in spiral
-            console.log(`🌀 Spiral mode ON - spiral tinting ${cluster.length} tiles`);
             this.tintedCluster = cluster;
             this.applyTintInSpiral(cluster, tile, 0x00ff00);
         }
@@ -393,11 +377,9 @@ export default class TileManager {
         const landUse = this.scene.mapArray[index];
         const spiralMode = this.scene.inputManager?.spiralMode;
 
-        console.log(`💨 applyWindTint - landUse: ${landUse}, spiral mode: ${spiralMode}`);
 
         // Wind only works on ground tiles
         if (landUse !== 'ground' && landUse !== 'null') {
-            console.log(`❌ Wind only works on ground, not "${landUse}" - showing red tint`);
             tile.setTint(0xff0000); // Red = invalid
             this.tintedCluster = [tile];
             this.savedClusterForUpgrade = [];
@@ -406,7 +388,6 @@ export default class TileManager {
 
         // Find connected ground tiles
         const cluster = this.findConnectedGroundTiles(tile);
-        console.log(`💨 Found cluster of ${cluster.length} ground tiles`);
 
         // ALWAYS save cluster for click handler (even if not showing spiral)
         this.savedClusterForUpgrade = cluster;
@@ -416,12 +397,10 @@ export default class TileManager {
 
         if (!spiralMode) {
             // Spiral mode OFF: Tint ONLY the hovered tile
-            console.log(`🎯 Spiral mode OFF - tinting single tile ${index}`);
             tile.setTint(tintColor);
             this.tintedCluster = [tile];
         } else {
             // Spiral mode ON: Tint entire cluster in spiral
-            console.log(`🌀 Spiral mode ON - spiral tinting ${cluster.length} tiles`);
             this.tintedCluster = cluster;
             this.applyTintInSpiral(cluster, tile, tintColor);
         }
@@ -673,7 +652,6 @@ export default class TileManager {
                     }
                 });
                 this.rumbledTiles = [];
-                console.log(`🛑 Reset shader pipelines on pointerout`);
             }
 
             // Clear all tints using utility method
@@ -686,20 +664,28 @@ export default class TileManager {
      * Handle base tile click - routes to appropriate handler based on mode
      */
     handleBaseTileClick(tile, index, pointer) {
-        console.log(`⚫ TileTypesManager.handleBaseTileClick - tile ${index}`);
+
+        // Log all tile data including OSM data
+        console.log(`\n📍 TILE CLICKED (Index: ${index})`);
+        console.log(`   ID: ${tile.id}`);
+        console.log(`   Grid Position: (${tile.gridX}, ${tile.gridY})`);
+        console.log(`   Texture: ${tile.texture.key}`);
+        console.log(`   Screen Position: (${tile.x.toFixed(1)}, ${tile.y.toFixed(1)})`);
+
+        // Log OSM data if available
+        const osmData = this.scene.tileOsmData.get(tile.id);
+        if (osmData) {
+            console.log(`   📦 OSM Data:`, osmData);
+        } else {
+            console.log(`   ⚠️ No OSM data available for this tile`);
+        }
+        console.log('\n');
 
         const mode = this.getTintingMode();
-        console.log(`🎮 Click mode: ${mode}`);
-
-        // Debug: Show tintedCluster state
-        console.log(`🔍 tintedCluster length: ${this.tintedCluster ? this.tintedCluster.length : 0}`);
-        console.log(`🔍 Clicked tile in tintedCluster? ${this.tintedCluster && this.tintedCluster.includes(tile)}`);
-        console.log(`🔍 savedClusterForUpgrade length: ${this.savedClusterForUpgrade ? this.savedClusterForUpgrade.length : 0}`);
 
         // Only handle clicks if tile is in tinted cluster
         if (!this.tintedCluster || !this.tintedCluster.includes(tile)) {
             console.log(`⚠️ Tile not in tinted cluster - ignoring click`);
-            console.log(`⚠️ This might be because pointerout cleared the tint before click registered`);
             return;
         }
 
@@ -769,7 +755,6 @@ export default class TileManager {
      * DISABLED FOR NOW - causing interference with solar upgrades
      */
     handleBaseClick(tile, index) {
-        console.log(`🌳 handleBaseClick called - DISABLED to prevent interference`);
         // TODO: Re-implement tree auto-placement after solar upgrades are working
         // const isGreenTinted = this.hoveredCategory === 'greenery';
         // if (!isGreenTinted) return;
@@ -793,18 +778,15 @@ export default class TileManager {
         const category = this.getTileCategory(landUse);
         const spiralMode = this.scene.inputManager?.spiralMode;
 
-        console.log(`☀️ handleSolarClick - category: ${category}, spiral mode: ${spiralMode}, cluster size: ${this.savedClusterForUpgrade.length}`);
 
         let tilesToUpgrade;
 
         if (!spiralMode) {
             // Spiral mode OFF: Upgrade ONLY index 0
             tilesToUpgrade = [this.savedClusterForUpgrade[0]];
-            console.log(`🎯 Upgrading index 0 only`);
         } else {
             // Spiral mode ON: Upgrade ENTIRE cluster
             tilesToUpgrade = this.savedClusterForUpgrade;
-            console.log(`🌀 Upgrading entire cluster (${tilesToUpgrade.length} tiles)`);
         }
 
         // Determine upgrade type
@@ -820,7 +802,6 @@ export default class TileManager {
      */
     handleTreesClick(tile, index) {
         if (!this.savedClusterForUpgrade || this.savedClusterForUpgrade.length === 0) {
-            console.log(`⚠️ No saved cluster - ignoring click`);
             return;
         }
 
@@ -828,11 +809,9 @@ export default class TileManager {
         const category = this.getTileCategory(landUse);
         const spiralMode = this.scene.inputManager?.spiralMode;
 
-        console.log(`🌲 handleTreesClick - category: ${category}, spiral mode: ${spiralMode}, cluster size: ${this.savedClusterForUpgrade.length}`);
 
         // Trees can only be placed on greenery
         if (category !== 'greenery') {
-            console.log(`❌ Trees can only be placed on greenery, not "${category}"`);
             return;
         }
 
@@ -841,11 +820,9 @@ export default class TileManager {
         if (!spiralMode) {
             // Spiral mode OFF: Upgrade ONLY index 0
             tilesToUpgrade = [this.savedClusterForUpgrade[0]];
-            console.log(`🎯 Upgrading index 0 only`);
         } else {
             // Spiral mode ON: Upgrade ENTIRE cluster
             tilesToUpgrade = this.savedClusterForUpgrade;
-            console.log(`🌀 Upgrading entire cluster (${tilesToUpgrade.length} tiles)`);
         }
 
         // Place wood tiles on the cluster
@@ -858,7 +835,6 @@ export default class TileManager {
      */
     handleWindClick(tile, index) {
         if (!this.savedClusterForUpgrade || this.savedClusterForUpgrade.length === 0) {
-            console.log(`⚠️ No saved cluster - ignoring click`);
             return;
         }
 
@@ -866,11 +842,9 @@ export default class TileManager {
         const category = this.getTileCategory(landUse);
         const spiralMode = this.scene.inputManager?.spiralMode;
 
-        console.log(`💨 handleWindClick - landUse: ${landUse}, category: ${category}, spiral mode: ${spiralMode}, cluster size: ${this.savedClusterForUpgrade.length}`);
 
         // Wind can only be placed on ground tiles
         if (landUse !== 'ground' && landUse !== 'null') {
-            console.log(`❌ Wind can only be placed on ground tiles, not "${landUse}"`);
             return;
         }
 
@@ -879,11 +853,9 @@ export default class TileManager {
         if (!spiralMode) {
             // Spiral mode OFF: Upgrade ONLY index 0
             tilesToUpgrade = [this.savedClusterForUpgrade[0]];
-            console.log(`🎯 Upgrading index 0 only`);
         } else {
             // Spiral mode ON: Upgrade ENTIRE cluster
             tilesToUpgrade = this.savedClusterForUpgrade;
-            console.log(`🌀 Upgrading entire cluster (${tilesToUpgrade.length} tiles)`);
         }
 
         // Wind turbines use the "wind" texture
@@ -898,7 +870,6 @@ export default class TileManager {
      * Handle destroy/bulldoze click - convert tile to ground
      */
     handleDestroyClick(tile, index) {
-        console.log(`🔨 handleDestroyClick - tile ${index}`);
 
         const oldTileType = tile.texture.key;
 
@@ -906,7 +877,6 @@ export default class TileManager {
         try {
             tile.resetPipeline();
             this.rumbledTiles = this.rumbledTiles.filter(t => t !== tile);
-            console.log(`🛑 Reset shader pipeline on tile ${index} before bulldozing`);
         } catch (error) {
             console.error(`⚠️ Failed to reset pipeline on tile ${index}:`, error);
         }
@@ -951,9 +921,7 @@ export default class TileManager {
         if (!this.scene.isLoadingMap) {
             this.scene.saveState();
         }
-
-        console.log(`✅ Bulldozed ${oldTileType} → ground`);
-    }
+   }
 
     /**
      * NEW UNIFIED ARCHITECTURE:
@@ -984,23 +952,16 @@ export default class TileManager {
                     newTileType = currentType + upgradeType;
                 }
 
-                console.log(`🔧 [${orderIndex + 1}/${spiralOrder.length}] Upgrading: ${currentType} → ${newTileType}`);
-
                 // Check if texture exists
                 if (this.scene.textures.exists(newTileType)) {
-                    console.log(`🔧 BEFORE upgrade - tile.texture.key: ${tile.texture.key}`);
 
                     // Update texture
                     tile.setTexture(newTileType, 0);
 
-                    console.log(`🔧 AFTER setTexture - tile.texture.key: ${tile.texture.key}`);
-
                     // Update mapArray
                     const tileIndex = this.scene.mapTiles.indexOf(tile);
                     if (tileIndex !== -1) {
-                        console.log(`🔧 Updating mapArray[${tileIndex}] from "${this.scene.mapArray[tileIndex]}" to "${newTileType}"`);
                         this.scene.mapArray[tileIndex] = newTileType;
-                        console.log(`🔧 Verified: mapArray[${tileIndex}] = "${this.scene.mapArray[tileIndex]}"`);
                     }
 
                     // Clear tint
@@ -1010,10 +971,8 @@ export default class TileManager {
 
                     // Play animation if exists
                     if (this.scene.anims.exists(newTileType)) {
-                        console.log(`🎬 Playing animation for: ${newTileType}`);
                         tile.play({ key: newTileType, randomFrame: true });
                     } else {
-                        console.log(`⚠️ No animation for: ${newTileType} - stopping animations`);
                         tile.anims.stop();
                     }
 
@@ -1022,10 +981,8 @@ export default class TileManager {
                         const changeIndex = this.scene.tileChanges.findIndex(t => t.id === tile.id);
                         if (changeIndex !== -1) {
                             this.scene.tileChanges[changeIndex].newTileType = newTileType;
-                            console.log(`📝 Updated tileChanges[${changeIndex}] to ${newTileType}`);
                         } else {
                             this.scene.tileChanges.push({ id: tile.id, newTileType: newTileType });
-                            console.log(`📝 Added new tileChange: id=${tile.id}, newTileType=${newTileType}`);
                         }
                     }
 
@@ -1042,7 +999,6 @@ export default class TileManager {
 
                 // On last tile: update simulation & save state
                 if (orderIndex === spiralOrder.length - 1) {
-                    console.log(`✅ Upgrade complete! ${upgradeCount}/${spiralOrder.length} tiles upgraded`);
 
                     if (this.scene.citySim) {
                         this.scene.citySim.immediateUpdate();
@@ -1118,12 +1074,10 @@ export default class TileManager {
         const gs = this.scene.gameState;
 
         // Debug: Show current state
-        console.log(`🔍 getTintingMode - upgrade: ${gs.upgrade}, solar: ${gs.solar}, trees: ${gs.trees}, destroy: ${gs.destroy}`);
 
         // Check for active tool states (in priority order)
         // SIMPLIFIED: Only check upgrade property, not both upgrade and solar
         if (gs.upgrade === 'solar') {
-            console.log(`✅ Returning 'solar' mode`);
             return 'solar';
         }
         if (gs.trees) return 'trees';
@@ -1191,7 +1145,6 @@ export default class TileManager {
         if (this.categoryDefinitions[category]) {
             if (!this.categoryDefinitions[category].includes(landUseType)) {
                 this.categoryDefinitions[category].push(landUseType);
-                console.log(`✅ Added '${landUseType}' to ${category} category`);
                 // Re-initialize to update arrays
                 this.initialize();
             }
@@ -1206,7 +1159,6 @@ export default class TileManager {
             const index = this.categoryDefinitions[category].indexOf(landUseType);
             if (index > -1) {
                 this.categoryDefinitions[category].splice(index, 1);
-                console.log(`✅ Removed '${landUseType}' from ${category} category`);
                 // Re-initialize to update arrays
                 this.initialize();
             }
